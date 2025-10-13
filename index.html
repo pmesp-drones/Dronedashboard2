@@ -5,126 +5,136 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
 
-  <!-- Tailwind (apenas utilitário de estilo) -->
+  <!-- Tailwind para utilidades visuais -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    :root { --card:#111827; --bg:#0b1220; }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body { background: var(--bg); color: #fff; margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif; }
-    .container { max-width: 1400px; margin: 0 auto; padding: 1rem; }
-    .grid-container { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    @media (max-width: 1024px) { .grid-container { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 640px)  { .grid-container { grid-template-columns: 1fr; } }
-
-    .video-card {
-      background: var(--card);
-      border-radius: 14px;
-      overflow: hidden;
-      box-shadow: 0 8px 30px rgba(0,0,0,.35);
-      transition: box-shadow .2s ease, transform .08s ease;
-      position: relative;
+    :root{
+      --bg:#0b1220;
+      --card:#111827;
+      --muted:#94a3b8;
+      --accent:#60a5fa;
     }
-    .video-card.dragging { opacity: .75; transform: scale(.995); }
-    .video-card .bar {
+    *{ box-sizing:border-box }
+    html,body{ height:100% }
+    body{
+      margin:0; background:var(--bg); color:#fff;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+    }
+    .container{ max-width:1400px; margin:0 auto; padding:1rem }
+    .grid-container{ display:grid; gap:1rem; grid-template-columns:repeat(2, minmax(0,1fr)) }
+    @media (max-width:1024px){ .grid-container{ grid-template-columns:repeat(2, minmax(0,1fr)) } }
+    @media (max-width:640px){ .grid-container{ grid-template-columns:1fr } }
+    .video-card{
+      background:var(--card); border-radius:14px; overflow:hidden;
+      box-shadow:0 10px 30px rgba(0,0,0,.38); position:relative; transition:.12s ease;
+    }
+    .video-card.dragging{ opacity:.8; transform:scale(.997) }
+    iframe{ width:100%; aspect-ratio:16/9; border:0; display:block; background:#000 }
+    .bar{
       display:flex; align-items:center; justify-content:space-between;
-      padding: .65rem .9rem; border-top: 1px solid rgba(255,255,255,.06);
+      padding:.65rem .9rem; border-top:1px solid rgba(255,255,255,.08)
     }
-    .chip { font-size: .72rem; opacity: .85; }
-    .kbd { background: rgba(255,255,255,.1); padding: .1rem .35rem; border-radius: 4px; font-size: .72rem; }
-    .btn {
+    .menu{
+      position:absolute; right:.6rem; top:.6rem; z-index:3; display:flex; gap:.4rem; align-items:center;
+    }
+    .btn{
       display:inline-flex; align-items:center; gap:.35rem;
-      padding:.45rem .7rem; border-radius:.6rem;
-      border:1px solid rgba(255,255,255,.14);
-      background:rgba(255,255,255,.06);
+      padding:.45rem .7rem; border-radius:.6rem; cursor:pointer; user-select:none;
+      border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.08); color:#fff;
       transition: background .15s ease, border-color .15s ease, transform .06s ease;
-      cursor:pointer; user-select:none;
+      font-size:.86rem;
     }
-    .btn:hover { background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.25); }
-    .btn:active { transform: translateY(1px); }
-    .btn-danger { background:rgba(255,77,77,.15); border-color:rgba(255,77,77,.35); }
-    .btn-danger:hover { background:rgba(255,77,77,.25); }
-    .pill {
-      border:1px dashed rgba(255,255,255,.18); border-radius:.6rem; padding:.3rem .55rem; font-size:.76rem; opacity:.9;
+    .btn:hover{ background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.28) }
+    .btn:active{ transform:translateY(1px) }
+    .btn-danger{ background:rgba(255,88,88,.14); border-color:rgba(255,88,88,.35) }
+    .btn-danger:hover{ background:rgba(255,88,88,.22) }
+    .select{
+      background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.2);
+      color:#fff; padding:.35rem .55rem; border-radius:.5rem; font-size:.85rem;
     }
-    .badge {
-      padding:.15rem .45rem; border-radius:.45rem; font-size:.7rem;
-      background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.15);
+    .handle{ cursor:grab }
+    .badge{ padding:.15rem .45rem; border-radius:.45rem; font-size:.72rem; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.15) }
+    .pill{ border:1px dashed rgba(255,255,255,.18); border-radius:.6rem; padding:.3rem .55rem; font-size:.76rem; opacity:.9 }
+    .ghost{
+      border:2px dashed rgba(255,255,255,.25); background:rgba(255,255,255,.04);
+      height: 260px; border-radius:12px;
     }
-    .menu {
-      position:absolute; right:.6rem; top:.6rem; z-index:3;
-      display:flex; align-items:center; gap:.4rem;
+    .hidden{ display:none !important }
+    .muted{ color:var(--muted) }
+    .header{
+      display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:.4rem 0 1rem;
     }
-    .menu .select, .menu select {
-      background:rgba(0,0,0,.35);
-      border:1px solid rgba(255,255,255,.2);
-      padding:.35rem .45rem; border-radius:.5rem; font-size:.8rem; color:#fff;
+
+    /* ===== Overlay de Login (Portinha) ===== */
+    #gate{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(180deg, rgba(8,12,24,.96), rgba(8,12,24,.9)); z-index:50;
     }
-    .menu .handle { cursor:grab; }
-    .offline-banner {
-      position:fixed; left:50%; transform:translateX(-50%);
-      bottom: 14px; background:#1f2937; border:1px solid rgba(255,255,255,.12);
-      padding:.5rem .8rem; border-radius:.7rem; z-index:20; box-shadow:0 6px 20px rgba(0,0,0,.4);
-      display:none;
+    .panel{
+      width:100%; max-width:380px; background:#0f172a; border:1px solid rgba(255,255,255,.14);
+      border-radius:16px; padding:1.2rem; box-shadow:0 24px 70px rgba(0,0,0,.5)
     }
-    .ghost {
-      border:2px dashed rgba(255,255,255,.25);
-      background: rgba(255,255,255,.04);
-      height: 260px; border-radius: 12px;
+    .panel h2{ margin:.2rem 0 .75rem 0; font-size:1.15rem; font-weight:800; text-align:center }
+    .input{
+      width:100%; background:#0b1220; color:#fff; border:1px solid rgba(255,255,255,.18);
+      border-radius:.6rem; padding:.6rem .7rem; margin:.35rem 0 .7rem 0; outline:none;
     }
-    .hidden { display:none !important; }
-    iframe { width:100%; aspect-ratio: 16 / 9; border:0; background:#000; display:block; }
-    .header {
-      display:flex; align-items:center; justify-content:space-between;
-      gap:1rem; margin: .6rem 0 1rem 0;
-    }
-    .header h1 { font-size: clamp(1.15rem, 1.6vw, 1.45rem); margin:0; opacity:.95; letter-spacing:.2px; }
-    .header .tools { display:flex; align-items:center; gap:.4rem; }
-    .link { text-decoration: underline; text-underline-offset: 3px; opacity:.9; }
+    .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(96,165,250,.25) }
+    .login-btn{ width:100%; padding:.6rem .7rem; border-radius:.6rem; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#fff; cursor:pointer }
+    .login-btn:hover{ background:rgba(255,255,255,.14) }
+    .err{ color:#ff6b6b; font-size:.85rem; min-height:1.2rem; text-align:center; margin-top:.3rem }
   </style>
 
-  <!-- ====== PORTINHA (login antes de carregar qualquer coisa) ====== -->
+  <!-- Carrega a YouTube Iframe API -->
   <script>
-    (function gate() {
-      const USER = "OPERACAOCPM";
-      const PASS = "CAVPMDRONES";
-      try {
-        let ok = false;
-        while (!ok) {
-          const u = prompt("Usuário:");
-          if (u === null) { document.write("<h2 style='color:#fff;text-align:center;margin-top:35vh'>Acesso cancelado.</h2>"); throw new Error("Login cancelado"); }
-          const p = prompt("Senha:");
-          if (p === null) { document.write("<h2 style='color:#fff;text-align:center;margin-top:35vh'>Acesso cancelado.</h2>"); throw new Error("Login cancelado"); }
-          if (u === USER && p === PASS) { ok = true; break; }
-          alert("Credenciais incorretas. Tente novamente.");
-        }
-      } catch(e) { console.error(e); }
+    (function loadYT(){
+      const s = document.createElement('script');
+      s.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(s);
     })();
   </script>
 </head>
-
 <body>
-  <div class="container">
+  <!-- ===== Portinha (Overlay) ===== -->
+  <div id="gate">
+    <div class="panel">
+      <h2>Área Restrita</h2>
+      <label class="text-sm muted">Usuário</label>
+      <input id="user" class="input" autocomplete="username" />
+      <label class="text-sm muted">Senha</label>
+      <input id="pass" class="input" type="password" autocomplete="current-password" />
+      <button id="enterBtn" class="login-btn">Entrar</button>
+      <div id="msg" class="err"></div>
+      <div class="text-xs muted mt-2" style="text-align:center">Acesso autorizado somente a pessoal CAVPM.</div>
+    </div>
+  </div>
+
+  <!-- ===== App ===== -->
+  <div id="app" class="container hidden">
     <div class="header">
-      <h1>Dashboard Programa de Policiamento com Drones <span class="badge" id="modeBadge">carregando…</span></h1>
-      <div class="tools">
+      <h1 class="text-xl font-bold">Dashboard Programa de Policiamento com Drones <span class="badge" id="modeBadge">carregando…</span></h1>
+      <div class="flex items-center gap-2">
         <span class="pill">Cols: <span id="colsInfo">2</span></span>
         <span class="pill">Qualidade padrão: <span id="qDefaultInfo">144p</span></span>
-        <a id="toggleLink" class="btn" href="#">Trocar modo</a>
+        <a id="toggleLink" class="btn" href="#" title="Alternar entre View/Edit">Trocar modo</a>
       </div>
     </div>
 
     <div id="grid" class="grid-container"></div>
-    <div id="emptyState" class="hidden" style="margin-top:2rem; text-align:center; opacity:.9">
-      <p>Nenhum vídeo configurado.</p>
-      <p class="text-sm opacity-80">No modo editor, clique em <span class="kbd">+</span> para adicionar IDs de vídeos ou playlists do YouTube.</p>
+
+    <div id="emptyState" class="hidden" style="margin-top:2rem; text-align:center; opacity:.85">
+      <p>Nenhuma stream configurada.</p>
+      <p class="text-sm muted">No modo editor, clique em <span class="badge">+</span> para adicionar IDs de vídeos/playlist do YouTube.</p>
     </div>
   </div>
 
-  <div id="offlineBanner" class="offline-banner">Modo offline: exibindo último layout salvo.</div>
+  <div id="offlineBanner" class="fixed left-1/2 -translate-x-1/2 bottom-4 px-3 py-2 rounded-md"
+       style="display:none; background:#1f2937; border:1px solid rgba(255,255,255,.15); box-shadow:0 10px 28px rgba(0,0,0,.35)">
+    Modo offline: exibindo último layout salvo.
+  </div>
 
-  <!-- ====== Template: Card ====== -->
+  <!-- ===== Template de Card ===== -->
   <template id="cardTpl">
     <div class="video-card" draggable="false">
       <div class="menu">
@@ -143,43 +153,32 @@
       <iframe loading="lazy" allow="autoplay; encrypted-media" allowfullscreen></iframe>
       <div class="bar">
         <div class="title text-sm font-semibold"></div>
-        <div class="chip opacity-80"></div>
+        <div class="text-xs opacity-80">Qualidade: <span class="qlabel">144p</span></div>
       </div>
     </div>
   </template>
 
-  <!-- ====== Painel rápido do Editor ====== -->
+  <!-- ===== Barra do Editor ===== -->
   <div id="editorBar" class="hidden" style="position:fixed; right:16px; bottom:16px; display:flex; gap:.4rem; z-index:5;">
     <button id="addBtn" class="btn" title="Adicionar vídeo/playlist">+</button>
-    <button id="saveBtn" class="btn" title="Salvar layout">Salvar</button>
+    <button id="saveBtn" class="btn" title="Salvar no Firebase">Salvar</button>
     <button id="clearBtn" class="btn btn-danger" title="Limpar tudo">Limpar</button>
   </div>
 
-  <!-- ======================= SCRIPTS ======================= -->
-
-  <!-- YouTube Iframe API -->
-  <script>
-    // Carrega a API uma única vez
-    (function loadYT(){
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.head.appendChild(tag);
-    })();
-  </script>
-
-  <!-- Firebase (v8 p/ simplicidade) -->
+  <!-- ===== Firebase (opcional; v8 para simplicidade) ===== -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
+  <!-- ================= LÓGICA ================= -->
   <script>
-    // ========= CONFIG =========
+    /* ================== CONFIG ================== */
     const DEFAULT_QUALITY = "tiny"; // 144p
     const QUALITY_LABEL   = { tiny:"144p", small:"240p", medium:"360p", large:"480p", hd720:"720p", hd1080:"1080p", highres:"Máx" };
-    const DB_PATH         = "dashboards/main";   // ajuste se usar outro nó
     const Q_ORDER         = ["tiny","small","medium","large","hd720","hd1080","highres"];
-    let   YT_READY        = false;
+    const DB_PATH         = "dashboards/main";
+    const LS_KEY          = "drone_dash_state_v12_full";
 
-    // 🔧 Substitua abaixo pela sua config real, se desejar usar Firebase
+    // 🔧 Substitua se quiser espelhar no Firebase
     const FIREBASE = {
       apiKey: "AIzaSy_EXEMPLO_SUBSTITUA",
       authDomain: "SEU-APP.firebaseapp.com",
@@ -191,39 +190,29 @@
       measurementId: "G-XXXXXXX"
     };
 
-    // Safe init do Firebase (opcional)
     let db = null;
-    try {
-      firebase.initializeApp(FIREBASE);
-      db = firebase.database();
-      console.log("[Firebase] Inicializado");
-    } catch (e) {
-      console.warn("[Firebase] Não inicializado (ok se estiver usando apenas localStorage).", e?.message || e);
-    }
+    try { firebase.initializeApp(FIREBASE); db = firebase.database(); }
+    catch(e){ console.warn("[Firebase] opcional, ignorado:", e?.message || e); }
 
-    // ========= HELPERS =========
+    /* ================== STATE/UI ================== */
+    let YT_READY = false;
+    let PLAYERS = {};   // idx -> player
+    let CARDS   = { cols:2, items:[] };
+
     const qs  = sel => document.querySelector(sel);
     const qsa = sel => Array.from(document.querySelectorAll(sel));
-    const esc = s => (s||"").toString().replace(/[&<>"'`=\/]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'}[m]));
+    const esc = s => (s||"").toString().replace(/[&<>"'`=\/]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'}[m]);
+
+    function uid(){ return Math.random().toString(36).slice(2,9); }
     const param = (k, d=null) => new URLSearchParams(location.search).get(k) ?? d;
     const MODE = (param("mode","view")+"").toLowerCase() === "edit" ? "edit" : "view";
     const VIEW_COLS_OVERRIDE = param("cols", null);
-    const colsInfo = qs("#colsInfo");
-    const qDefaultInfo = qs("#qDefaultInfo");
-    const modeBadge = qs("#modeBadge");
-    const toggleLink = qs("#toggleLink");
-
-    let PLAYERS = {};   // id -> YT.Player
-    let CARDS   = [];   // estrutura do layout (array de objetos)
-
-    function uid() { return Math.random().toString(36).slice(2,9); }
 
     function setModeUI(){
-      modeBadge.textContent = (MODE === "edit" ? "EDITOR" : "VISUALIZADOR");
-      modeBadge.className = "badge " + (MODE==="edit" ? "" : "");
+      qs("#modeBadge").textContent = MODE === "edit" ? "EDITOR" : "VISUALIZADOR";
       const tpl = new URL(location.href);
       tpl.searchParams.set("mode", MODE === "edit" ? "view" : "edit");
-      toggleLink.href = tpl.toString();
+      qs("#toggleLink").href = tpl.toString();
       qs("#editorBar").classList.toggle("hidden", MODE!=="edit");
     }
 
@@ -232,125 +221,52 @@
       const cols = VIEW_COLS_OVERRIDE ? parseInt(VIEW_COLS_OVERRIDE, 10) : (CARDS.cols || 2);
       const safe = Math.min(4, Math.max(1, (isFinite(cols) ? cols : 2)));
       grid.style.gridTemplateColumns = `repeat(${safe}, minmax(0, 1fr))`;
-      colsInfo.textContent = safe;
+      qs("#colsInfo").textContent = safe;
       CARDS.cols = safe;
     }
 
-    function showOfflineBanner(show){
-      qs("#offlineBanner").style.display = show ? "block" : "none";
-    }
+    function showOfflineBanner(show){ qs("#offlineBanner").style.display = show ? "block" : "none"; }
 
-    // ========= STORAGE (Local + Firebase) =========
-    const LS_KEY = "drone_dash_state_v12";
-
-    function saveLocal(){
-      const data = JSON.stringify(CARDS);
-      try { localStorage.setItem(LS_KEY, data); } catch(e){}
-    }
-
+    /* ============== STORAGE ============== */
+    function saveLocal(){ try { localStorage.setItem(LS_KEY, JSON.stringify(CARDS)); } catch(e){} }
     function loadLocal(){
-      try {
-        const data = localStorage.getItem(LS_KEY);
-        return data ? JSON.parse(data) : null;
-      } catch(e){ return null; }
+      try{
+        const s = localStorage.getItem(LS_KEY);
+        return s ? JSON.parse(s) : null;
+      }catch(e){ return null; }
     }
-
     async function saveRemote(){
       if (!db) return false;
-      try {
-        await db.ref(DB_PATH).set(CARDS);
-        return true;
-      } catch(e) {
-        console.warn("[Firebase] Falha ao salvar:", e.message || e);
-        return false;
-      }
+      try { await db.ref(DB_PATH).set(CARDS); return true; }
+      catch(e){ console.warn("[Firebase] save fail:", e?.message || e); return false; }
     }
-
     async function loadRemote(){
       if (!db) return null;
-      try {
+      try{
         const snap = await db.ref(DB_PATH).get();
         return snap.exists() ? snap.val() : null;
-      } catch(e) {
-        console.warn("[Firebase] Falha ao carregar:", e.message || e);
-        return null;
-      }
+      }catch(e){ console.warn("[Firebase] load fail:", e?.message || e); return null; }
     }
 
-    // ========= QUALIDADE =========
-    function getAvailableQualityLevels(player){
-      try {
-        const lvls = player.getAvailableQualityLevels?.() || [];
-        return lvls.length ? lvls : Q_ORDER.slice(); // fallback
-      } catch(e){ return Q_ORDER.slice(); }
-    }
-
-    function enforceQuality(player, desired){
-      if (!player || !player.setPlaybackQuality) return;
-      const avail = getAvailableQualityLevels(player);
-      // se o desejado não existir, pega o mais próximo abaixo
-      let pick = desired;
-      if (!avail.includes(desired)) {
-        const idx = Q_ORDER.indexOf(desired);
-        for (let i = idx; i >= 0; i--) if (avail.includes(Q_ORDER[i])) { pick = Q_ORDER[i]; break; }
-      }
-      try { player.setPlaybackQuality(pick); } catch(e){}
-    }
-
-    // ========= RENDER =========
-    function renderGrid(){
-      const grid = qs("#grid");
-      grid.innerHTML = "";
-
-      if (!Array.isArray(CARDS.items) || CARDS.items.length === 0) {
-        qs("#emptyState").classList.remove("hidden");
-        return;
-      } else {
-        qs("#emptyState").classList.add("hidden");
-      }
-
-      CARDS.items.forEach((item, idx) => {
-        const node = document.importNode(qs("#cardTpl").content, true).firstElementChild;
-
-        node.dataset.idx = String(idx);
-        node.querySelector(".title").textContent = item.label || `Stream ${idx+1}`;
-        node.querySelector(".chip").textContent  = item.loc || "";
-        node.querySelector(".q-select").value    = (item.quality || DEFAULT_QUALITY);
-
-        const iframe = node.querySelector("iframe");
-        iframe.id = `yt_${item.id}_${idx}_${uid()}`;
-
-        const url = buildYouTubeEmbedURL(item.id, item.isPlaylist);
-        iframe.src = url;
-
-        // Modo editor: botões e drag
-        node.querySelector(".btn-remove").classList.toggle("hidden", MODE!=="edit");
-        node.querySelector(".handle").classList.toggle("hidden", MODE!=="edit");
-        if (MODE === "edit") attachDragHandlers(node);
-
-        grid.appendChild(node);
-      });
-
-      // cria players quando API pronta
-      if (YT_READY) createPlayers();
-    }
+    /* ============== YT ============== */
+    window.onYouTubeIframeAPIReady = function(){ YT_READY = true; createPlayers(); };
 
     function buildYouTubeEmbedURL(id, isPlaylist){
       if (isPlaylist) {
         return `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(id)}&enablejsapi=1&controls=1&rel=0&modestbranding=1`;
       }
-      // Se for link inteiro, tenta extrair
+      // URL completa?
       if (/youtube\.com|youtu\.be/.test(id)) {
         const vid = extractVideoId(id);
         return `https://www.youtube.com/embed/${vid}?enablejsapi=1&controls=1&rel=0&modestbranding=1`;
       }
-      // ID direto
+      // ID puro
       return `https://www.youtube.com/embed/${encodeURIComponent(id)}?enablejsapi=1&controls=1&rel=0&modestbranding=1`;
     }
 
     function extractVideoId(input){
       try {
-        if (/^PL|^UU|^LL/i.test(input)) return input;
+        if (/^PL|^UU|^LL/i.test(input)) return input; // playlist id
         const u = new URL(input);
         if (u.hostname.includes("youtu.be")) return u.pathname.replace("/","");
         const v = u.searchParams.get("v");
@@ -358,72 +274,123 @@
       } catch(e){ return input; }
     }
 
-    // ========= YT API HOOK =========
-    window.onYouTubeIframeAPIReady = function(){
-      YT_READY = true;
-      createPlayers();
-    };
+    function getAvailableQualityLevels(player){
+      try{
+        const lvls = player.getAvailableQualityLevels?.() || [];
+        return lvls.length ? lvls : Q_ORDER.slice();
+      }catch(e){ return Q_ORDER.slice(); }
+    }
+
+    function enforceQuality(player, desired){
+      if (!player || !player.setPlaybackQuality) return;
+      const avail = getAvailableQualityLevels(player);
+      let pick = desired;
+      if (!avail.includes(desired)){
+        const idx = Q_ORDER.indexOf(desired);
+        for (let i = idx; i >= 0; i--){
+          if (avail.includes(Q_ORDER[i])) { pick = Q_ORDER[i]; break; }
+        }
+      }
+      try { player.setPlaybackQuality(pick); } catch(e){}
+    }
+
+    function updateHUDQuality(idx, val){
+      const card = qsa(".video-card")[idx];
+      if (!card) return;
+      card.querySelector(".qlabel").textContent = QUALITY_LABEL[val] || val;
+    }
+
+    /* ============== RENDER ============== */
+    function renderGrid(){
+      const grid = qs("#grid");
+      grid.innerHTML = "";
+
+      if (!Array.isArray(CARDS.items) || CARDS.items.length === 0){
+        qs("#emptyState").classList.remove("hidden");
+        return;
+      } else {
+        qs("#emptyState").classList.add("hidden");
+      }
+
+      CARDS.items.forEach((item, idx)=>{
+        const node = document.importNode(qs("#cardTpl").content, true).firstElementChild;
+        node.dataset.idx = String(idx);
+        node.querySelector(".title").textContent = item.label || `Stream ${idx+1}`;
+        node.querySelector(".q-select").value    = (item.quality || DEFAULT_QUALITY);
+
+        const iframe = node.querySelector("iframe");
+        iframe.id = `yt_${item.id}_${idx}_${uid()}`;
+        iframe.src = buildYouTubeEmbedURL(item.id, item.isPlaylist);
+
+        // Modo editor
+        node.querySelector(".btn-remove").classList.toggle("hidden", MODE!=="edit");
+        node.querySelector(".handle").classList.toggle("hidden", MODE!=="edit");
+        if (MODE === "edit") attachDragHandlers(node);
+
+        grid.appendChild(node);
+      });
+
+      if (YT_READY) createPlayers();
+    }
 
     function createPlayers(){
-      qsa("iframe[id^='yt_']").forEach((ifr, i) => {
+      qsa("iframe[id^='yt_']").forEach((ifr)=>{
         const idx = parseInt(ifr.closest(".video-card").dataset.idx,10);
         const item = CARDS.items[idx];
-        try {
+        try{
           const p = new YT.Player(ifr.id, {
             events: {
-              onReady: (ev) => {
+              onReady: (ev)=>{
                 PLAYERS[idx] = ev.target;
-                // aplica qualidade inicial
                 const desired = item.quality || DEFAULT_QUALITY;
                 enforceQuality(ev.target, desired);
+                updateHUDQuality(idx, desired);
               },
-              onStateChange: (ev) => {
-                if (ev.data === YT.PlayerState.BUFFERING || ev.data === YT.PlayerState.PLAYING) {
+              onStateChange: (ev)=>{
+                if (ev.data === YT.PlayerState.BUFFERING || ev.data === YT.PlayerState.PLAYING){
                   const desired = item.quality || DEFAULT_QUALITY;
                   enforceQuality(ev.target, desired);
                 }
               }
             }
           });
-        } catch(e) {
+        }catch(e){
           console.warn("YT Player error:", e?.message || e);
         }
       });
     }
 
-    // ========= DRAG & DROP (modo editor) =========
+    /* ============== DRAG & DROP ============== */
     let dragIndex = null;
 
     function attachDragHandlers(cardEl){
-      cardEl.setAttribute("draggable", "true");
-      cardEl.addEventListener("dragstart", (e)=>{
+      const grid = qs("#grid");
+      cardEl.setAttribute("draggable","true");
+
+      cardEl.addEventListener("dragstart", ()=>{
         dragIndex = parseInt(cardEl.dataset.idx,10);
         cardEl.classList.add("dragging");
       });
+
       cardEl.addEventListener("dragend", ()=>{
         cardEl.classList.remove("dragging");
         dragIndex = null;
+        removeGhost();
       });
 
       cardEl.addEventListener("dragover", (e)=>{
         e.preventDefault();
-        const grid = qs("#grid");
         const afterEl = getDragAfterElement(grid, e.clientY);
-        if (afterEl == null) {
-          grid.appendChild(createGhost());
-        } else {
-          grid.insertBefore(createGhost(), afterEl);
-        }
+        if (afterEl == null) grid.appendChild(createGhost());
+        else grid.insertBefore(createGhost(), afterEl);
       });
 
       cardEl.addEventListener("drop", (e)=>{
         e.preventDefault();
-        removeGhost();
-        const grid = qs("#grid");
         const children = Array.from(grid.children);
         const targetIdx = children.indexOf(cardEl);
-        if (dragIndex == null || targetIdx == null) return;
-        if (dragIndex === targetIdx) return;
+        removeGhost();
+        if (dragIndex == null || targetIdx == null || dragIndex === targetIdx) return;
         const arr = CARDS.items.slice();
         const [moved] = arr.splice(dragIndex,1);
         arr.splice(targetIdx,0,moved);
@@ -432,17 +399,17 @@
         renderGrid();
       });
 
-      // Botão remover
+      // remover
       cardEl.querySelector(".btn-remove").addEventListener("click", ()=>{
         const idx = parseInt(cardEl.dataset.idx,10);
-        if (idx > -1 && confirm("Remover esta stream?")) {
+        if (idx > -1 && confirm("Remover esta stream?")){
           CARDS.items.splice(idx,1);
           saveLocal();
           renderGrid();
         }
       });
 
-      // Seletor de qualidade
+      // qualidade
       cardEl.querySelector(".q-select").addEventListener("change", (e)=>{
         const idx = parseInt(cardEl.dataset.idx,10);
         const val = e.target.value;
@@ -454,40 +421,21 @@
       });
     }
 
-    function updateHUDQuality(idx, val){
-      const card = qsa(".video-card")[idx];
-      if (!card) return;
-      const chip = card.querySelector(".chip");
-      const label = QUALITY_LABEL[val] || val;
-      chip.textContent = `Qualidade: ${label}`;
-    }
-
     function getDragAfterElement(container, y){
-      const draggableElements = [...container.querySelectorAll(".video-card:not(.dragging)")];
-      return draggableElements.reduce((closest, child) => {
+      const items = [...container.querySelectorAll(".video-card:not(.dragging)")];
+      return items.reduce((closest, child)=>{
         const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) {
-          return { offset: offset, element: child }
-        } else {
-          return closest
-        }
+        const offset = y - box.top - box.height/2;
+        if (offset < 0 && offset > closest.offset){
+          return { offset, element: child }
+        } else { return closest }
       }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
-    function createGhost(){
-      removeGhost();
-      const ghost = document.createElement("div");
-      ghost.className = "ghost";
-      ghost.id = "ghost";
-      return ghost;
-    }
-    function removeGhost(){
-      const g = qs("#ghost");
-      if (g) g.remove();
-    }
+    function createGhost(){ removeGhost(); const g = document.createElement("div"); g.id="ghost"; g.className="ghost"; return g; }
+    function removeGhost(){ const g = qs("#ghost"); if (g) g.remove(); }
 
-    // ========= EDITOR BAR =========
+    /* ============== EDITOR BAR ============== */
     function editorInit(){
       if (MODE !== "edit") return;
       const addBtn = qs("#addBtn");
@@ -495,17 +443,25 @@
       const clearBtn = qs("#clearBtn");
 
       addBtn.addEventListener("click", ()=>{
-        const input = prompt("Cole um ID de vídeo (ex: dQw4w9WgXcQ) ou playlist (ex: PL...) ou uma URL do YouTube:");
+        const input = prompt("Cole um ID/URL de vídeo ou playlist do YouTube (ex: dQw4w9WgXcQ, https://youtu.be/..., ou list=PL...):");
         if (!input) return;
-        const item = parseInputToItem(input.trim());
-        CARDS.items.push(item);
+        const isPL = /^PL|^UU|^LL/i.test(input) || /[?&]list=/.test(input);
+        let id = input.trim();
+
+        if (isPL && /[?&]list=/.test(input)){
+          try { id = new URL(input).searchParams.get("list") || input; } catch(e){}
+        } else {
+          id = extractVideoId(id);
+        }
+
+        CARDS.items.push({ id, isPlaylist:isPL, label: isPL ? "Playlist" : "Live / Vídeo", quality: DEFAULT_QUALITY });
         saveLocal();
         renderGrid();
       });
 
       saveBtn.addEventListener("click", async ()=>{
         const ok = await saveRemote();
-        alert(ok ? "Layout salvo no Firebase." : "Não foi possível salvar no Firebase (verifique a configuração). O layout já está salvo localmente.");
+        alert(ok ? "Layout salvo no Firebase." : "Falha ao salvar no Firebase (config opcional). O layout está salvo localmente.");
       });
 
       clearBtn.addEventListener("click", ()=>{
@@ -516,73 +472,73 @@
       });
     }
 
-    function parseInputToItem(input){
-      // playlist?
-      const isPL = /^PL|^UU|^LL/i.test(input) || /[?&]list=/.test(input);
-      let id = input;
-      let label = "";
-      if (isPL) {
-        if (/[?&]list=/.test(input)) {
-          try { id = new URL(input).searchParams.get("list") || input; } catch(e){}
-        }
-      } else {
-        // tenta extrair videoId se for URL
-        id = extractVideoId(input);
-      }
-      label = isPL ? "Playlist" : "Live / Vídeo";
-      return { id, label, loc:"", isPlaylist: isPL, quality: DEFAULT_QUALITY };
-    }
-
-    // ========= BOOT =========
+    /* ============== BOOT ============== */
     async function boot(){
+      // HUD
+      qs("#qDefaultInfo").textContent = QUALITY_LABEL[DEFAULT_QUALITY] || DEFAULT_QUALITY;
       setModeUI();
 
-      // Estado inicial: tenta remoto, senão local
+      // Estado inicial: remoto -> local -> default
       let state = await loadRemote();
-      if (!state) {
+      if (!state){
         state = loadLocal();
         showOfflineBanner(!!state);
       }
-      if (!state) {
-        // estado base
+      if (!state){
         state = {
           cols: 2,
           items: [
-            // Exemplo vazio — adicione no modo editor
+            // Pré-popule se quiser:
+            // { id:"dQw4w9WgXcQ", isPlaylist:false, label:"Stream 01", quality: DEFAULT_QUALITY },
+            // { id:"PLynYy...",    isPlaylist:true,  label:"Playlist",   quality: DEFAULT_QUALITY },
           ]
         };
       }
       CARDS = state;
 
-      // Override de colunas por query
       applyGridCols();
-
-      // Render inicial
       renderGrid();
-
-      // Atualiza HUD de qualidade padrão
-      qDefaultInfo.textContent = QUALITY_LABEL[DEFAULT_QUALITY] || DEFAULT_QUALITY;
-
-      // Editor features
       editorInit();
 
-      // Eventos globais (delegação)
+      // Delegação global de mudanças de qualidade (caso o listener por-card não tenha sido ligado ainda)
       qs("#grid").addEventListener("change", (e)=>{
-        const sel = e.target.closest(".q-select");
-        if (!sel) return;
+        if (!e.target.matches(".q-select")) return;
         const card = e.target.closest(".video-card");
-        if (!card) return;
         const idx = parseInt(card.dataset.idx,10);
-        CARDS.items[idx].quality = sel.value;
+        const val = e.target.value;
+        CARDS.items[idx].quality = val;
         saveLocal();
         const p = PLAYERS[idx];
-        enforceQuality(p, sel.value);
-        updateHUDQuality(idx, sel.value);
+        enforceQuality(p, val);
+        updateHUDQuality(idx, val);
       });
     }
 
-    // Inicia
-    boot();
+    /* ============== LOGIN (overlay) ============== */
+    (function gateInit(){
+      const USER_OK = "OPERACAOCPM";
+      const PASS_OK = "CAVPMDRONES";
+      const $gate = qs("#gate");
+      const $app  = qs("#app");
+      const $msg  = qs("#msg");
+
+      function unlock(){
+        $gate.classList.add("hidden");
+        $app.classList.remove("hidden");
+        boot();
+      }
+
+      qs("#enterBtn").addEventListener("click", ()=>{
+        const u = qs("#user").value.trim();
+        const p = qs("#pass").value;
+        if (u === USER_OK && p === PASS_OK) unlock();
+        else { $msg.textContent = "Credenciais incorretas."; setTimeout(()=> $msg.textContent="", 1800); }
+      });
+
+      ["user","pass"].forEach(id=>{
+        qs("#"+id).addEventListener("keydown", e=>{ if (e.key === "Enter") qs("#enterBtn").click(); });
+      });
+    })();
   </script>
 </body>
 </html>
