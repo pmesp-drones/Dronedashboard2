@@ -65,93 +65,47 @@
     .header{
       display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:.4rem 0 1rem;
     }
+    /* estilos simples do overlay */
+    .gate-wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,12,24,.92);z-index:50;}
+    .gate-panel{width:100%;max-width:380px;background:#0f172a;border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+    .gate-panel h2{margin:.2rem 0 .75rem 0;font-size:1.15rem;font-weight:800;text-align:center}
+    .gate-input{width:100%;margin-top:6px;padding:10px;border-radius:8px;background:#0b1220;color:#fff;border:1px solid rgba(255,255,255,.18);outline:none}
+    .gate-btn{width:100%;margin-top:12px;padding:10px;border-radius:8px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);cursor:pointer}
+    .gate-msg{min-height:18px;color:#ff6b6b;font-size:13px;text-align:center;margin-top:6px}
+  </style>
 
-<!-- ====== PORTINHA (overlay) — VERSÃO À PROVA DE CSP ====== -->
-<div id="gate" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,12,24,.92);z-index:50;">
-  <div style="width:100%;max-width:380px;background:#0f172a;border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px;box-shadow:0 24px 70px rgba(0,0,0,.5)">
-    <h2 style="margin:.2rem 0 .75rem 0;font-size:1.15rem;font-weight:800;text-align:center">Área Restrita</h2>
-
-    <form id="loginForm" onsubmit="return gateLogin(event)">
-      <label style="font-size:13px;opacity:.85;display:block;">Usuário</label>
-      <input id="user" autocomplete="username"
-             style="width:100%;margin-top:6px;padding:10px;border-radius:8px;background:#0b1220;color:#fff;border:1px solid rgba(255,255,255,.18);outline:none">
-
-      <label style="font-size:13px;opacity:.85;display:block;margin-top:8px;">Senha</label>
-      <input id="pass" type="password" autocomplete="current-password"
-             style="width:100%;margin-top:6px;padding:10px;border-radius:8px;background:#0b1220;color:#fff;border:1px solid rgba(255,255,255,.18);outline:none">
-
-      <button type="submit"
-              style="width:100%;margin-top:12px;padding:10px;border-radius:8px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);cursor:pointer">
-        Entrar
-      </button>
-      <div id="msg" style="min-height:18px;color:#ff6b6b;font-size:13px;text-align:center;margin-top:6px"></div>
-      <div style="text-align:center;margin-top:6px;opacity:.8;font-size:12px;">
-        Acesso autorizado somente a pessoal CAVPM.
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- Deixe o app inicialmente escondido, para só mostrar após login -->
-<div id="app" style="display:none;"><!-- ... seu dashboard aqui ... --></div>
-
-<script>
-  // Credenciais
-  var USER_OK = "OPERACAOCPM";
-  var PASS_OK = "CAVPMDRONES";
-
-  // Função global chamada pelo onsubmit do formulário
-  function gateLogin(ev){
-    if (ev && ev.preventDefault) ev.preventDefault();
-
-    var u = (document.getElementById("user").value || "").trim();
-    var p =  document.getElementById("pass").value || "";
-
-    // Normaliza espaços e respeita maiúsculas/minúsculas (credencial é CAIXA ALTA)
-    if (u === USER_OK && p === PASS_OK){
-      // Libera app
-      document.getElementById("gate").style.display = "none";
-      document.getElementById("app").style.display  = "block";
-
-      // Se você tem uma função boot() que carrega o dashboard, chame aqui:
-      if (typeof boot === "function") try { boot(); } catch(e){ console.error(e); }
-
-      return false; // impede submit real
-    } else {
-      var msg = document.getElementById("msg");
-      msg.textContent = "Credenciais incorretas.";
-      setTimeout(function(){ msg.textContent = ""; }, 1800);
-      return false;
-    }
-  }
-</script>
-
-  <!-- Carrega a YouTube Iframe API -->
+  <!-- YouTube Iframe API -->
   <script>
-    (function loadYT(){
-      const s = document.createElement('script');
-      s.src = "https://www.youtube.com/iframe_api";
+    (function(){
+      var s=document.createElement('script'); s.src="https://www.youtube.com/iframe_api";
       document.head.appendChild(s);
     })();
   </script>
+
+  <!-- Firebase (opcional; v8) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
+
 <body>
-  <!-- ===== Portinha (Overlay) ===== -->
-  <div id="gate">
-    <div class="panel">
+  <!-- ====== PORTINHA (ÚNICA) ====== -->
+  <div id="gate" class="gate-wrap">
+    <div class="gate-panel">
       <h2>Área Restrita</h2>
-      <label class="text-sm muted">Usuário</label>
-      <input id="user" class="input" autocomplete="username" />
-      <label class="text-sm muted">Senha</label>
-      <input id="pass" class="input" type="password" autocomplete="current-password" />
-      <button id="enterBtn" class="login-btn">Entrar</button>
-      <div id="msg" class="err"></div>
-      <div class="text-xs muted mt-2" style="text-align:center">Acesso autorizado somente a pessoal CAVPM.</div>
+      <form id="loginForm" onsubmit="return gateLogin(event)">
+        <label style="font-size:13px;opacity:.85;display:block;">Usuário</label>
+        <input id="user" class="gate-input" autocomplete="username">
+        <label style="font-size:13px;opacity:.85;display:block;margin-top:8px;">Senha</label>
+        <input id="pass" class="gate-input" type="password" autocomplete="current-password">
+        <button type="submit" class="gate-btn">Entrar</button>
+        <div id="msg" class="gate-msg"></div>
+        <div style="text-align:center;margin-top:6px;opacity:.8;font-size:12px;">Acesso autorizado somente a pessoal CAVPM.</div>
+      </form>
     </div>
   </div>
 
-  <!-- ===== App ===== -->
-  <div id="app" class="container hidden">
+  <!-- ====== APP (ÚNICO) ====== -->
+  <div id="app" class="container" style="display:none;">
     <div class="header">
       <h1 class="text-xl font-bold">Dashboard Programa de Policiamento com Drones <span class="badge" id="modeBadge">carregando…</span></h1>
       <div class="flex items-center gap-2">
@@ -205,12 +159,28 @@
     <button id="clearBtn" class="btn btn-danger" title="Limpar tudo">Limpar</button>
   </div>
 
-  <!-- ===== Firebase (opcional; v8 para simplicidade) ===== -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
   <!-- ================= LÓGICA ================= -->
   <script>
+    /* ====== PORTINHA (form onsubmit) ====== */
+    var USER_OK = "OPERACAOCPM";
+    var PASS_OK = "CAVPMDRONES";
+    function gateLogin(ev){
+      if (ev && ev.preventDefault) ev.preventDefault();
+      var u = (document.getElementById("user").value || "").trim();
+      var p =  document.getElementById("pass").value || "";
+      if (u === USER_OK && p === PASS_OK){
+        document.getElementById("gate").style.display = "none";
+        document.getElementById("app").style.display  = "block";
+        if (typeof boot === "function") try { boot(); } catch(e){ console.error(e); }
+        return false;
+      } else {
+        var msg = document.getElementById("msg");
+        msg.textContent = "Credenciais incorretas.";
+        setTimeout(function(){ msg.textContent = ""; }, 1800);
+        return false;
+      }
+    }
+
     /* ================== CONFIG ================== */
     const DEFAULT_QUALITY = "tiny"; // 144p
     const QUALITY_LABEL   = { tiny:"144p", small:"240p", medium:"360p", large:"480p", hd720:"720p", hd1080:"1080p", highres:"Máx" };
@@ -270,10 +240,8 @@
     /* ============== STORAGE ============== */
     function saveLocal(){ try { localStorage.setItem(LS_KEY, JSON.stringify(CARDS)); } catch(e){} }
     function loadLocal(){
-      try{
-        const s = localStorage.getItem(LS_KEY);
-        return s ? JSON.parse(s) : null;
-      }catch(e){ return null; }
+      try{ const s = localStorage.getItem(LS_KEY); return s ? JSON.parse(s) : null; }
+      catch(e){ return null; }
     }
     async function saveRemote(){
       if (!db) return false;
@@ -282,62 +250,47 @@
     }
     async function loadRemote(){
       if (!db) return null;
-      try{
-        const snap = await db.ref(DB_PATH).get();
-        return snap.exists() ? snap.val() : null;
-      }catch(e){ console.warn("[Firebase] load fail:", e?.message || e); return null; }
+      try{ const snap = await db.ref(DB_PATH).get(); return snap.exists() ? snap.val() : null; }
+      catch(e){ console.warn("[Firebase] load fail:", e?.message || e); return null; }
     }
 
     /* ============== YT ============== */
     window.onYouTubeIframeAPIReady = function(){ YT_READY = true; createPlayers(); };
 
     function buildYouTubeEmbedURL(id, isPlaylist){
-      if (isPlaylist) {
-        return `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(id)}&enablejsapi=1&controls=1&rel=0&modestbranding=1`;
-      }
-      // URL completa?
+      if (isPlaylist) return `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(id)}&enablejsapi=1&controls=1&rel=0&modestbranding=1`;
       if (/youtube\.com|youtu\.be/.test(id)) {
         const vid = extractVideoId(id);
         return `https://www.youtube.com/embed/${vid}?enablejsapi=1&controls=1&rel=0&modestbranding=1`;
       }
-      // ID puro
       return `https://www.youtube.com/embed/${encodeURIComponent(id)}?enablejsapi=1&controls=1&rel=0&modestbranding=1`;
     }
-
     function extractVideoId(input){
       try {
-        if (/^PL|^UU|^LL/i.test(input)) return input; // playlist id
+        if (/^PL|^UU|^LL/i.test(input)) return input;
         const u = new URL(input);
         if (u.hostname.includes("youtu.be")) return u.pathname.replace("/","");
         const v = u.searchParams.get("v");
         return v || input;
       } catch(e){ return input; }
     }
-
     function getAvailableQualityLevels(player){
-      try{
-        const lvls = player.getAvailableQualityLevels?.() || [];
-        return lvls.length ? lvls : Q_ORDER.slice();
-      }catch(e){ return Q_ORDER.slice(); }
+      try{ const lvls = player.getAvailableQualityLevels?.() || []; return lvls.length ? lvls : Q_ORDER.slice(); }
+      catch(e){ return Q_ORDER.slice(); }
     }
-
     function enforceQuality(player, desired){
       if (!player || !player.setPlaybackQuality) return;
       const avail = getAvailableQualityLevels(player);
       let pick = desired;
       if (!avail.includes(desired)){
         const idx = Q_ORDER.indexOf(desired);
-        for (let i = idx; i >= 0; i--){
-          if (avail.includes(Q_ORDER[i])) { pick = Q_ORDER[i]; break; }
-        }
+        for (let i = idx; i >= 0; i--){ if (avail.includes(Q_ORDER[i])){ pick = Q_ORDER[i]; break; } }
       }
       try { player.setPlaybackQuality(pick); } catch(e){}
     }
-
     function updateHUDQuality(idx, val){
       const card = qsa(".video-card")[idx];
-      if (!card) return;
-      card.querySelector(".qlabel").textContent = QUALITY_LABEL[val] || val;
+      if (card) card.querySelector(".qlabel").textContent = QUALITY_LABEL[val] || val;
     }
 
     /* ============== RENDER ============== */
@@ -402,7 +355,6 @@
 
     /* ============== DRAG & DROP ============== */
     let dragIndex = null;
-
     function attachDragHandlers(cardEl){
       const grid = qs("#grid");
       cardEl.setAttribute("draggable","true");
@@ -411,20 +363,17 @@
         dragIndex = parseInt(cardEl.dataset.idx,10);
         cardEl.classList.add("dragging");
       });
-
       cardEl.addEventListener("dragend", ()=>{
         cardEl.classList.remove("dragging");
         dragIndex = null;
         removeGhost();
       });
-
       cardEl.addEventListener("dragover", (e)=>{
         e.preventDefault();
         const afterEl = getDragAfterElement(grid, e.clientY);
         if (afterEl == null) grid.appendChild(createGhost());
         else grid.insertBefore(createGhost(), afterEl);
       });
-
       cardEl.addEventListener("drop", (e)=>{
         e.preventDefault();
         const children = Array.from(grid.children);
@@ -460,7 +409,6 @@
         updateHUDQuality(idx, val);
       });
     }
-
     function getDragAfterElement(container, y){
       const items = [...container.querySelectorAll(".video-card:not(.dragging)")];
       return items.reduce((closest, child)=>{
@@ -471,7 +419,6 @@
         } else { return closest }
       }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
-
     function createGhost(){ removeGhost(); const g = document.createElement("div"); g.id="ghost"; g.className="ghost"; return g; }
     function removeGhost(){ const g = qs("#ghost"); if (g) g.remove(); }
 
@@ -490,9 +437,7 @@
 
         if (isPL && /[?&]list=/.test(input)){
           try { id = new URL(input).searchParams.get("list") || input; } catch(e){}
-        } else {
-          id = extractVideoId(id);
-        }
+        } else { id = extractVideoId(id); }
 
         CARDS.items.push({ id, isPlaylist:isPL, label: isPL ? "Playlist" : "Live / Vídeo", quality: DEFAULT_QUALITY });
         saveLocal();
@@ -514,25 +459,13 @@
 
     /* ============== BOOT ============== */
     async function boot(){
-      // HUD
       qs("#qDefaultInfo").textContent = QUALITY_LABEL[DEFAULT_QUALITY] || DEFAULT_QUALITY;
       setModeUI();
 
-      // Estado inicial: remoto -> local -> default
       let state = await loadRemote();
+      if (!state){ state = loadLocal(); showOfflineBanner(!!state); }
       if (!state){
-        state = loadLocal();
-        showOfflineBanner(!!state);
-      }
-      if (!state){
-        state = {
-          cols: 2,
-          items: [
-            // Pré-popule se quiser:
-            // { id:"dQw4w9WgXcQ", isPlaylist:false, label:"Stream 01", quality: DEFAULT_QUALITY },
-            // { id:"PLynYy...",    isPlaylist:true,  label:"Playlist",   quality: DEFAULT_QUALITY },
-          ]
-        };
+        state = { cols: 2, items: [] };
       }
       CARDS = state;
 
@@ -540,7 +473,6 @@
       renderGrid();
       editorInit();
 
-      // Delegação global de mudanças de qualidade (caso o listener por-card não tenha sido ligado ainda)
       qs("#grid").addEventListener("change", (e)=>{
         if (!e.target.matches(".q-select")) return;
         const card = e.target.closest(".video-card");
@@ -553,32 +485,6 @@
         updateHUDQuality(idx, val);
       });
     }
-
-    /* ============== LOGIN (overlay) ============== */
-    (function gateInit(){
-      const USER_OK = "OPERACAOCPM";
-      const PASS_OK = "CAVPMDRONES";
-      const $gate = qs("#gate");
-      const $app  = qs("#app");
-      const $msg  = qs("#msg");
-
-      function unlock(){
-        $gate.classList.add("hidden");
-        $app.classList.remove("hidden");
-        boot();
-      }
-
-      qs("#enterBtn").addEventListener("click", ()=>{
-        const u = qs("#user").value.trim();
-        const p = qs("#pass").value;
-        if (u === USER_OK && p === PASS_OK) unlock();
-        else { $msg.textContent = "Credenciais incorretas."; setTimeout(()=> $msg.textContent="", 1800); }
-      });
-
-      ["user","pass"].forEach(id=>{
-        qs("#"+id).addEventListener("keydown", e=>{ if (e.key === "Enter") qs("#enterBtn").click(); });
-      });
-    })();
   </script>
 </body>
 </html>
