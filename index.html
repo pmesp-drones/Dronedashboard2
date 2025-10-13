@@ -66,7 +66,7 @@
     /* ===== Login universal ===== */
     const AUTH_USER='OPERACAOCPM';
     const AUTH_PASS='CAVPMDRONES';
-    const REMEMBER_MIN=240; // 4h
+    const REMEMBER_MIN=140; // 2h
 
     function auth_ok_until(){ const v=localStorage.getItem('auth_ok_until'); return v?parseInt(v,10):0; }
     function set_auth_ok(){ localStorage.setItem('auth_ok_until', String(Date.now()+REMEMBER_MIN*60*1000)); }
