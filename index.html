@@ -64,17 +64,61 @@
     const qsa=(s,e=document)=>Array.from(e.querySelectorAll(s));
 
     /* ===== Login universal ===== */
-    const AUTH_USER='OPERACAOCPM';
-    const AUTH_PASS='CAVPMDRONES';
-    const REMEMBER_MIN=140; // 2h
+<!-- 🔒 Gate simples de login (GitHub Pages) -->
+<div id="gate-overlay" style="
+  position:fixed; inset:0; background:#0b1220; color:#fff; 
+  display:none; align-items:center; justify-content:center; z-index:999999;">
+  <div style="width:100%; max-width:360px; background:#111827; border-radius:14px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.4);">
+    <h2 style="margin:0 0 12px; font:600 20px/1.2 system-ui">Acesso restrito</h2>
+    <p style="margin:0 0 16px; opacity:.8; font:14px system-ui">Digite usuário e senha para continuar.</p>
+    <form id="gate-form">
+      <label style="display:block; font:600 12px system-ui; margin-bottom:6px;">Usuário</label>
+      <input id="gate-user" type="text" autocomplete="username" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#0f172a; color:#fff; margin-bottom:12px;">
+      <label style="display:block; font:600 12px system-ui; margin-bottom:6px;">Senha</label>
+      <input id="gate-pass" type="password" autocomplete="current-password" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#0f172a; color:#fff;">
+      <p id="gate-error" style="color:#f87171; font:12px system-ui; height:16px; margin:8px 0 0;"></p>
+      <button type="submit" style="margin-top:16px; width:100%; padding:10px 12px; border:0; border-radius:10px; background:#2563eb; color:#fff; font:600 14px system-ui; cursor:pointer;">
+        Entrar
+      </button>
+    </form>
+  </div>
+</div>
 
-    function auth_ok_until(){ const v=localStorage.getItem('auth_ok_until'); return v?parseInt(v,10):0; }
-    function set_auth_ok(){ localStorage.setItem('auth_ok_until', String(Date.now()+REMEMBER_MIN*60*1000)); }
-    function doLogin(){
-      const u=qs('#authUser')?.value?.trim()||'', p=qs('#authPass')?.value||'', err=qs('#authErr');
-      if(u===AUTH_USER && p===AUTH_PASS){ set_auth_ok(); qs('#authOverlay').style.display='none'; return true; }
-      err?.classList.remove('hidden'); setTimeout(()=>err?.classList.add('hidden'),1500); return false;
+<script>
+(function gate(){
+  const OK_KEY = 'cavpm_gate_ok';
+  const USER_OK = 'OPERACAOCPM';
+  const PASS_OK = 'CAVPMDRONES';
+
+  const overlay = document.getElementById('gate-overlay');
+  const form = document.getElementById('gate-form');
+  const user = document.getElementById('gate-user');
+  const pass = document.getElementById('gate-pass');
+  const err  = document.getElementById('gate-error');
+
+  // já liberado nesta máquina?
+  const already = localStorage.getItem(OK_KEY) === '1';
+  if (!already) overlay.style.display = 'flex';
+
+  form?.addEventListener('submit', function(e){
+    e.preventDefault();
+    if ((user.value || '').trim() === USER_OK && (pass.value || '').trim() === PASS_OK){
+      localStorage.setItem(OK_KEY, '1'); // mantém logado neste navegador
+      overlay.style.display = 'none';
+    } else {
+      err.textContent = 'Usuário ou senha inválidos.';
+      pass.value = '';
+      pass.focus();
     }
+  });
+
+  // opcional: permitir logout via console
+  window.cavpmLogout = function(){
+    localStorage.removeItem(OK_KEY);
+    overlay.style.display = 'flex';
+  };
+})();
+</script>
 
     /* ===== Firebase ===== */
     const FIREBASE = {
