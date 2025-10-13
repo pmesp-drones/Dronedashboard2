@@ -26,7 +26,6 @@
     .drag-over{ outline:2px dashed #60a5fa; outline-offset:-6px; }
     .hidden { display:none!important; }
 
-    /* OFFLINE overlay: não bloqueia clique, fica abaixo dos botões */
     .offline-overlay{
       position:absolute; inset:0; display:none; align-items:center; justify-content:center;
       text-align:center; padding:1rem;
@@ -39,7 +38,6 @@
       border:1px solid rgba(255,255,255,.25); border-radius:.5rem; font-size:.9rem; color:#e5e7eb;
     }
 
-    /* ===== QUALIDADE (ícone + menu) ===== */
     .q-wrap{ position:absolute; right:.5rem; bottom:.5rem; display:flex; align-items:center; gap:.4rem; z-index:12; }
     .q-btn{ display:flex; align-items:center; gap:.35rem; font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.45); backdrop-filter:blur(2px); cursor:pointer; }
     .q-btn:hover{ background:rgba(255,255,255,.08); }
@@ -48,13 +46,10 @@
     .q-item:hover{ background:rgba(255,255,255,.08); }
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
 
-    /* Botões de canto (tela cheia / remover) acima do overlay */
     .controls { z-index:15; }
   </style>
 
-  <!-- YouTube API -->
   <script src="https://www.youtube.com/iframe_api"></script>
-  <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
@@ -62,63 +57,6 @@
   (function(){
     const qs=(s,e=document)=>e.querySelector(s);
     const qsa=(s,e=document)=>Array.from(e.querySelectorAll(s));
-
-    /* ===== Login universal ===== */
-<!-- 🔒 Gate simples de login (GitHub Pages) -->
-<div id="gate-overlay" style="
-  position:fixed; inset:0; background:#0b1220; color:#fff; 
-  display:none; align-items:center; justify-content:center; z-index:999999;">
-  <div style="width:100%; max-width:360px; background:#111827; border-radius:14px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.4);">
-    <h2 style="margin:0 0 12px; font:600 20px/1.2 system-ui">Acesso restrito</h2>
-    <p style="margin:0 0 16px; opacity:.8; font:14px system-ui">Digite usuário e senha para continuar.</p>
-    <form id="gate-form">
-      <label style="display:block; font:600 12px system-ui; margin-bottom:6px;">Usuário</label>
-      <input id="gate-user" type="text" autocomplete="username" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#0f172a; color:#fff; margin-bottom:12px;">
-      <label style="display:block; font:600 12px system-ui; margin-bottom:6px;">Senha</label>
-      <input id="gate-pass" type="password" autocomplete="current-password" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#0f172a; color:#fff;">
-      <p id="gate-error" style="color:#f87171; font:12px system-ui; height:16px; margin:8px 0 0;"></p>
-      <button type="submit" style="margin-top:16px; width:100%; padding:10px 12px; border:0; border-radius:10px; background:#2563eb; color:#fff; font:600 14px system-ui; cursor:pointer;">
-        Entrar
-      </button>
-    </form>
-  </div>
-</div>
-
-<script>
-(function gate(){
-  const OK_KEY = 'cavpm_gate_ok';
-  const USER_OK = 'OPERACAOCPM';
-  const PASS_OK = 'CAVPMDRONES';
-
-  const overlay = document.getElementById('gate-overlay');
-  const form = document.getElementById('gate-form');
-  const user = document.getElementById('gate-user');
-  const pass = document.getElementById('gate-pass');
-  const err  = document.getElementById('gate-error');
-
-  // já liberado nesta máquina?
-  const already = localStorage.getItem(OK_KEY) === '1';
-  if (!already) overlay.style.display = 'flex';
-
-  form?.addEventListener('submit', function(e){
-    e.preventDefault();
-    if ((user.value || '').trim() === USER_OK && (pass.value || '').trim() === PASS_OK){
-      localStorage.setItem(OK_KEY, '1'); // mantém logado neste navegador
-      overlay.style.display = 'none';
-    } else {
-      err.textContent = 'Usuário ou senha inválidos.';
-      pass.value = '';
-      pass.focus();
-    }
-  });
-
-  // opcional: permitir logout via console
-  window.cavpmLogout = function(){
-    localStorage.removeItem(OK_KEY);
-    overlay.style.display = 'flex';
-  };
-})();
-</script>
 
     /* ===== Firebase ===== */
     const FIREBASE = {
@@ -137,22 +75,17 @@
     const db=firebase.database();
     const dbRef=db.ref(DB_PATH);
 
-    /* ===== Estado & Params ===== */
     const params=new URLSearchParams(location.search);
     const MODE=(params.get('mode')||'edit').toLowerCase();
     const isView = MODE==='view';
     let COLS=parseInt(params.get('cols')||'2',10);
     let VIEW_COLS_OVERRIDE=null;
 
-    // ids aceita playlistId ou videoId (para teste)
     let VIDEO_IDS=[], LABELS=[], LOCS=[];
     let YT_READY=false;
-
-    // Players por índice
     const players = {};
 
-    /* ===== Qualidade ===== */
-    const DEFAULT_QUALITY='tiny'; // 144p
+    const DEFAULT_QUALITY='tiny';
     const Q_KEY_PREFIX='liveQ_';
     const Q_ORDER=['tiny','small','medium','large','hd720','hd1080','highres'];
     const Q_LABEL={tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',highres:'Máx.'};
@@ -181,15 +114,14 @@
       }, interval);
     }
 
-    /* ===== Utils ===== */
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
     const idFromUrl=u=>{
       try{
         const url=new URL(u);
         const list=url.searchParams.get('list');
-        if(list) return list; // playlist
+        if(list) return list;
         const v=url.searchParams.get('v');
-        if(v) return v;       // vídeo
+        if(v) return v;
         if(url.hostname.includes('youtu.be')) return url.pathname.slice(1);
       }catch(_){}
       if(typeof u==='string'){
@@ -200,7 +132,6 @@
     };
     const isPlaylistId=(id)=> typeof id==='string' && (id.startsWith('PL')||id.startsWith('UU')||id.startsWith('LL')||id.length>12);
 
-    /* ===== Drag & Drop (editor) ===== */
     let dragSrcIndex=null;
     function attachDnD(cardEl){
       if(isView) return;
@@ -232,13 +163,12 @@
       });
     }
 
-    /* ===== YouTube ===== */
     window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
 
     function applyGridCols(){
       const cols = (isView && VIEW_COLS_OVERRIDE!=null) ? VIEW_COLS_OVERRIDE : COLS;
       const grid=qs('#gridContainer');
-      if(grid) grid.style.gridTemplateColumns=`repeat(${cols}, 1fr)`;
+      if(grid) grid.style.gridTemplateColumns=repeat(${cols}, 1fr);
       const layout=qs('#layout'); if(layout) layout.value=String(cols);
     }
 
@@ -246,12 +176,7 @@
       return `
         <div class="q-wrap">
           <button type="button" class="q-btn" data-qbtn>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="opacity-90">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.89 3.31.877 2.42 2.42a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.89 1.543-.877 3.31-2.42 2.42a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.89-3.31-.877-2.42-2.42A1.724 1.724 0 004.317 13.65c-1.756-.426-1.756-2.924 0-3.35A1.724 1.724 0 005.383 7.73c-.89-1.543.877-3.31 2.42-2.42.99.57 2.232.04 2.522-.993z"/>
-              <circle cx="12" cy="12" r="3" stroke-width="2"></circle>
-            </svg>
-            <span data-qlabel>${currentLabel}</span>
+            ⚙ <span data-qlabel>${currentLabel}</span>
           </button>
           <div class="q-menu" data-qmenu>
             ${Q_ORDER.map(q=>`
@@ -260,13 +185,10 @@
               </div>
             `).join('')}
           </div>
-        </div>
-      `;
+        </div>`;
     }
 
-    // Delegação global p/ botões dos cards (remove/qualidade)
     document.addEventListener('click', (ev)=>{
-      // remover (só no editor)
       const rmBtn = ev.target.closest('[data-remove]');
       if(rmBtn && !isView){
         const card = ev.target.closest('.video-card');
@@ -280,8 +202,6 @@
         }
         return;
       }
-
-      // abrir/fechar menu de qualidade
       const qBtn = ev.target.closest('[data-qbtn]');
       if(qBtn){
         const menu = qBtn.parentElement.querySelector('[data-qmenu]');
@@ -291,8 +211,6 @@
         ev.stopPropagation();
         return;
       }
-
-      // escolher qualidade
       const qItem = ev.target.closest('.q-item');
       if(qItem){
         const card = ev.target.closest('.video-card');
@@ -307,8 +225,6 @@
         const menu = card.querySelector('[data-qmenu]'); if(menu) menu.style.display='none';
         return;
       }
-
-      // clique fora fecha menus
       const clickedInsideQ = ev.target.closest('.q-wrap');
       if(!clickedInsideQ){ qsa('.q-menu').forEach(m=> m.style.display='none'); }
     });
@@ -318,7 +234,7 @@
       grid.innerHTML='';
       applyGridCols();
 
-      if(LABELS.length<VIDEO_IDS.length){ for(let i=LABELS.length;i<VIDEO_IDS.length;i++) LABELS[i]=`Equipe ${String(i+1).padStart(2,'0')}`; }
+      if(LABELS.length<VIDEO_IDS.length){ for(let i=LABELS.length;i<VIDEO_IDS.length;i++) LABELS[i]=Equipe ${String(i+1).padStart(2,'0')}; }
       if(LOCS.length<VIDEO_IDS.length){   for(let i=LOCS.length;i<VIDEO_IDS.length;i++)   LOCS[i]=''; }
 
       if(!VIDEO_IDS.length){
@@ -329,158 +245,69 @@
       VIDEO_IDS.forEach((id,i)=>{
         const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
         const isPl=isPlaylistId(id);
-        const fullUrl = isPl ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}` : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-
+        const fullUrl = isPl ? https://www.youtube.com/playlist?list=${encodeURIComponent(id)} : https://www.youtube.com/watch?v=${encodeURIComponent(id)};
         const card=document.createElement('div');
         card.className='video-card';
         card.dataset.idx=String(i);
         card.dataset.vid=id;
-        card.id=`card_${i}`;
-
-        card.innerHTML=
-          `<div class="video-box">
+        card.id=card_${i};
+        card.innerHTML=`
+          <div class="video-box">
              <div id="yt_${i}" class="player-fill"></div>
-
              <div class="absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
                <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO
              </div>
-
              <div class="absolute top-2 right-2 flex gap-2 controls">
                <button class="tile-btn" onclick="window.open('${fullUrl}','_blank')">Tela cheia</button>
-               ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
+               ${isView ? '' : <button class="tile-btn" data-remove>Remover</button>}
              </div>
-
              <div class="offline-overlay" id="off_${i}">
-               <div class="offline-badge">
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12H3"/></svg>
-                 <span>OFFLINE • aguardando sinal</span>
-               </div>
+               <div class="offline-badge">OFFLINE • aguardando sinal</div>
              </div>
-
              ${qualityControlTemplate(Q_LABEL[savedQ])}
            </div>
-
            <div class="px-2 pt-1 pb-0 bg-gray-800/70">
              <h3 class="font-medium text-sm">${esc(LABELS[i]||'Equipe '+(i+1))}</h3>
              <p class="text-gray-400 text-[11px]">${esc(LOCS[i]||'')}</p>
            </div>`;
-
         grid.appendChild(card);
         attachDnD(card);
-
         if(YT_READY){
-          const playerConfig = {
-            width:'100%', height:'100%',
-            playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
-            events:{ onReady:e=>onPlayerReady(e, id, i), onStateChange:e=>onPlayerStateChange(e, id, i) }
-          };
-          if(isPl){ playerConfig.playerVars.listType='playlist'; playerConfig.playerVars.list=id; }
-          else { playerConfig.videoId=id; }
-          players[i] = new YT.Player(`yt_${i}`, playerConfig);
+          const cfg={width:'100%',height:'100%',playerVars:{autoplay:1,mute:1,playsinline:1,controls:0,rel:0,modestbranding:1},
+            events:{onReady:e=>{try{e.target.mute();e.target.playVideo();}catch(_){}
+              const desired=getSavedQ(id)||DEFAULT_QUALITY; enforceQuality(e.target,desired);
+              const lbl=card.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[desired]||desired;},
+              onStateChange:e=>{
+                const online=(e.data===1||e.data===3);
+                const ov=document.getElementById('off_'+i);
+                if(ov) ov.style.display=online?'none':'flex';
+              }}};
+          if(isPl){cfg.playerVars.listType='playlist';cfg.playerVars.list=id;} else {cfg.videoId=id;}
+          players[i]=new YT.Player(yt_${i},cfg);
         }
       });
     }
 
-    /* ===== OFFLINE (baseado no estado do player) ===== */
-    const OFFLINE_POLL_MS = 10000; // 10s
-
-    function setOffline(idx, flag){
-      const ov = document.getElementById(`off_${idx}`);
-      if(ov) ov.style.display = flag ? 'flex' : 'none';
-    }
-    function updateOnlineState(idx, state){
-      const online = (state===YT.PlayerState.PLAYING || state===YT.PlayerState.BUFFERING);
-      setOffline(idx, !online);
-    }
-
-    function onPlayerReady(e, id, idx){
-      try{ e.target.mute(); e.target.playVideo(); }catch(_){}
-      const desired=getSavedQ(id) || DEFAULT_QUALITY;
-      const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-      const best=pickAvailableQuality(desired, avail);
-      try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
-      enforceQuality(e.target, best);
-
-      // atualiza label engrenagem
-      const card=qs(`#card_${idx}`);
-      const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
-      if(!getSavedQ(id)) saveQ(id, best);
-
-      // começa como OFFLINE até tocar
-      setOffline(idx, true);
-    }
-
-    function onPlayerStateChange(e, id, idx){
-      if (typeof YT!=='undefined' && YT.PlayerState) updateOnlineState(idx, e.data);
-      if (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING){
-        const desired=getSavedQ(id) || DEFAULT_QUALITY;
-        const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-        const best=pickAvailableQuality(desired, avail);
-        try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
-      }
-    }
-
-    // Poll adicional para sincronizar overlay com estado atual
-    setInterval(()=>{
-      Object.keys(players).forEach(k=>{
-        const i = Number(k);
-        const p = players[i];
-        if(!p || typeof YT==='undefined' || !YT.PlayerState) return;
-        try{
-          const st = p.getPlayerState ? p.getPlayerState() : null;
-          if(st!=null){ updateOnlineState(i, st); }
-        }catch(_){}
-      });
-    }, OFFLINE_POLL_MS);
-
-    /* ===== Realtime ===== */
     function saveRealtime(){ dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() }); }
     function subscribeRealtime(){
       dbRef.on('value', snap=>{
         const j=snap.val(); if(!j) return;
-        const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
-        COLS = parseInt(j.cols||COLS||2,10);
-
-        // Para estabilidade dos botões/menus, preferimos re-render completo
-        const changed = JSON.stringify([VIDEO_IDS,LABELS,LOCS]) !== JSON.stringify([newIds,newLabels,newLocs]);
-        VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-        if (changed || !YT_READY) renderGrid();
-        else applyGridCols();
+        VIDEO_IDS=j.ids||[]; LABELS=j.labels||[]; LOCS=j.locs||[];
+        COLS=parseInt(j.cols||COLS||2,10);
+        renderGrid();
       });
     }
 
-    /* ===== UI Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
-      // Mostrar/ocultar botões conforme modo
       qs('#btnShare')?.classList.toggle('hidden', isView);
       qs('#btnConfig')?.classList.toggle('hidden', isView);
       qs('#btnClearAll')?.classList.toggle('hidden', isView);
-
-      // LOGIN EM QUALQUER MODO (view e edit)
-      if(auth_ok_until()<=Date.now()){
-        qs('#authOverlay').style.display='flex';
-        qs('#authForm')?.addEventListener('submit', e=>{ e.preventDefault(); doLogin(); });
-      } else {
-        qs('#authOverlay').style.display='none';
-      }
-
-      // Cabeçalho
       qs('#btnFullscreen')?.addEventListener('click',()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
-
-      // Layout select:
       qs('#layout')?.addEventListener('change', ()=>{
-        const val = parseInt(qs('#layout').value,10)||2;
-        if(isView){
-          VIEW_COLS_OVERRIDE = val;
-          applyGridCols();
-        } else {
-          COLS = val;
-          saveRealtime();
-          applyGridCols();
-        }
+        const val=parseInt(qs('#layout').value,10)||2;
+        if(isView){ VIEW_COLS_OVERRIDE=val; applyGridCols(); }
+        else{ COLS=val; saveRealtime(); applyGridCols(); }
       });
-
-      // Inserir equipe (editor)
       qs('#btnAddTeam')?.addEventListener('click', e=>{
         e.preventDefault();
         const name=qs('#teamName').value.trim();
@@ -490,123 +317,12 @@
         const id=idFromUrl(url);
         VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
         if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
-        saveRealtime();
-        renderGrid();
+        saveRealtime(); renderGrid();
         qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
       });
-
-      // Share link (editor)
       qs('#btnShare')?.addEventListener('click', ()=>{
         const base=location.origin+location.pathname;
         const url=new URL(base);
         url.searchParams.set('mode','view');
         url.searchParams.set('cols', String(COLS));
-        url.searchParams.set('sync','rt');
-        navigator.clipboard.writeText(url.toString()).then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
-      });
-
-      // Limpar tudo (editor)
-      qs('#btnClearAll')?.addEventListener('click', ()=>{
-        if(!confirm('Apagar TODAS as equipes do dashboard?')) return;
-        VIDEO_IDS=[]; LABELS=[]; LOCS=[];
-        saveRealtime();
-        renderGrid();
-      });
-
-      // Start RT e primeira render
-      subscribeRealtime();
-    });
-
-    // Garantir uma única definição global
-    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
-  })();
-  </script>
-</head>
-<body class="min-h-screen">
-
-  <!-- Overlay de Login -->
-  <div id="authOverlay" class="fixed inset-0 z-[1000] hidden items-center justify-center bg-black/70">
-    <div class="bg-gray-800 text-white w-full max-w-sm rounded-xl shadow-xl p-6">
-      <h2 class="text-lg font-semibold mb-4">Acesso restrito</h2>
-      <form id="authForm" class="space-y-3">
-        <div>
-          <label class="block text-sm mb-1">Usuário</label>
-          <input id="authUser" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="usuário">
-        </div>
-        <div>
-          <label class="block text-sm mb-1">Senha</label>
-          <input id="authPass" type="password" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="senha">
-        </div>
-        <button class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Entrar</button>
-        <p id="authErr" class="text-red-400 text-sm hidden">Usuário ou senha incorretos.</p>
-      </form>
-    </div>
-  </div>
-
-  <!-- Header -->
-  <header class="p-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-      <div class="flex items-center gap-3">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png" alt="PMESP" class="w-10 h-10 object-contain rounded bg-white/5 p-1">
-        <div>
-          <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-          <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <label class="text-xs text-gray-400">Layout</label>
-        <select id="layout" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
-          <option value="2">2 colunas</option>
-          <option value="3">3 colunas</option>
-          <option value="4">4 colunas</option>
-        </select>
-        <button id="btnFullscreen" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Tela Cheia</button>
-        <button id="btnShare" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Gerar Link</button>
-        <button id="btnConfig" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm"
-                onclick="document.getElementById('configModal').classList.remove('hidden')">
-          Inserir Equipe
-        </button>
-        <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
-          Limpar
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Grid -->
-  <main class="p-4 max-w-7xl mx-auto">
-    <div id="gridContainer" class="grid-container"></div>
-  </main>
-
-  <!-- Modal Inserir -->
-  <div id="configModal" class="fixed inset-0 bg-black/60 hidden z-50">
-    <div class="flex items-center justify-center min-h-screen p-4">
-      <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-        <h3 class="text-lg font-semibold mb-4 text-center">Inserir Equipe</h3>
-        <form id="teamForm" class="space-y-4">
-          <div>
-            <label class="block text-sm mb-1">Nome da Equipe</label>
-            <input id="teamName" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Ex.: Equipe Alfa">
-          </div>
-          <div>
-            <label class="block text-sm mb-1">Endereço da Operação</label>
-            <input id="teamLocation" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Rua / Bairro / Ponto de referência">
-          </div>
-          <div>
-            <label class="block text-sm mb-1">URL da Playlist/Vídeo</label>
-            <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://www.youtube.com/playlist?list=PLxxxxxxx ou https://www.youtube.com/watch?v=abc123">
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button id="btnAddTeam" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
-            <button type="button" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
-              onclick="document.getElementById('configModal').classList.add('hidden'); document.getElementById('teamForm').reset();">
-              Cancelar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-</body>
-</html>
+        url.searchParams
