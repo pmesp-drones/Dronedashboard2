@@ -66,25 +66,65 @@
       display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:.4rem 0 1rem;
     }
 
-    /* ===== Overlay de Login (Portinha) ===== */
-    #gate{
-      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      background:linear-gradient(180deg, rgba(8,12,24,.96), rgba(8,12,24,.9)); z-index:50;
+<!-- ====== PORTINHA (overlay) — VERSÃO À PROVA DE CSP ====== -->
+<div id="gate" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,12,24,.92);z-index:50;">
+  <div style="width:100%;max-width:380px;background:#0f172a;border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px;box-shadow:0 24px 70px rgba(0,0,0,.5)">
+    <h2 style="margin:.2rem 0 .75rem 0;font-size:1.15rem;font-weight:800;text-align:center">Área Restrita</h2>
+
+    <form id="loginForm" onsubmit="return gateLogin(event)">
+      <label style="font-size:13px;opacity:.85;display:block;">Usuário</label>
+      <input id="user" autocomplete="username"
+             style="width:100%;margin-top:6px;padding:10px;border-radius:8px;background:#0b1220;color:#fff;border:1px solid rgba(255,255,255,.18);outline:none">
+
+      <label style="font-size:13px;opacity:.85;display:block;margin-top:8px;">Senha</label>
+      <input id="pass" type="password" autocomplete="current-password"
+             style="width:100%;margin-top:6px;padding:10px;border-radius:8px;background:#0b1220;color:#fff;border:1px solid rgba(255,255,255,.18);outline:none">
+
+      <button type="submit"
+              style="width:100%;margin-top:12px;padding:10px;border-radius:8px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);cursor:pointer">
+        Entrar
+      </button>
+      <div id="msg" style="min-height:18px;color:#ff6b6b;font-size:13px;text-align:center;margin-top:6px"></div>
+      <div style="text-align:center;margin-top:6px;opacity:.8;font-size:12px;">
+        Acesso autorizado somente a pessoal CAVPM.
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Deixe o app inicialmente escondido, para só mostrar após login -->
+<div id="app" style="display:none;"><!-- ... seu dashboard aqui ... --></div>
+
+<script>
+  // Credenciais
+  var USER_OK = "OPERACAOCPM";
+  var PASS_OK = "CAVPMDRONES";
+
+  // Função global chamada pelo onsubmit do formulário
+  function gateLogin(ev){
+    if (ev && ev.preventDefault) ev.preventDefault();
+
+    var u = (document.getElementById("user").value || "").trim();
+    var p =  document.getElementById("pass").value || "";
+
+    // Normaliza espaços e respeita maiúsculas/minúsculas (credencial é CAIXA ALTA)
+    if (u === USER_OK && p === PASS_OK){
+      // Libera app
+      document.getElementById("gate").style.display = "none";
+      document.getElementById("app").style.display  = "block";
+
+      // Se você tem uma função boot() que carrega o dashboard, chame aqui:
+      if (typeof boot === "function") try { boot(); } catch(e){ console.error(e); }
+
+      return false; // impede submit real
+    } else {
+      var msg = document.getElementById("msg");
+      msg.textContent = "Credenciais incorretas.";
+      setTimeout(function(){ msg.textContent = ""; }, 1800);
+      return false;
     }
-    .panel{
-      width:100%; max-width:380px; background:#0f172a; border:1px solid rgba(255,255,255,.14);
-      border-radius:16px; padding:1.2rem; box-shadow:0 24px 70px rgba(0,0,0,.5)
-    }
-    .panel h2{ margin:.2rem 0 .75rem 0; font-size:1.15rem; font-weight:800; text-align:center }
-    .input{
-      width:100%; background:#0b1220; color:#fff; border:1px solid rgba(255,255,255,.18);
-      border-radius:.6rem; padding:.6rem .7rem; margin:.35rem 0 .7rem 0; outline:none;
-    }
-    .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(96,165,250,.25) }
-    .login-btn{ width:100%; padding:.6rem .7rem; border-radius:.6rem; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#fff; cursor:pointer }
-    .login-btn:hover{ background:rgba(255,255,255,.14) }
-    .err{ color:#ff6b6b; font-size:.85rem; min-height:1.2rem; text-align:center; margin-top:.3rem }
-  </style>
+  }
+</script>
 
   <!-- Carrega a YouTube Iframe API -->
   <script>
