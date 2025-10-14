@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v13 - principal + botão tornar principal -->
+  <!-- build: v13.2 - independência do visualizador -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -185,6 +185,12 @@
       });
     }
 
+    /* ===== ★ Independência do visualizador ===== */
+    const VIEW_MAIN_KEY = 'viewer_main_override';
+    function getViewOverride(){ try{ return isView ? localStorage.getItem(VIEW_MAIN_KEY) : null; }catch(_){ return null; } }
+    function setViewOverride(id){ try{ if(isView) localStorage.setItem(VIEW_MAIN_KEY, id||''); }catch(_){ } }
+    function clearViewOverride(){ try{ localStorage.removeItem(VIEW_MAIN_KEY); }catch(_){ } }
+
     /* ===== YouTube ===== */
     window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderAll(); };
 
@@ -236,7 +242,7 @@
         return;
       }
 
-      // tornar principal (funciona em view e edit)
+      // tornar principal (view e edit)
       const mainBtn = ev.target.closest('[data-setmain]');
       if(mainBtn){
         const card = ev.target.closest('.video-card');
@@ -301,7 +307,12 @@
       }
       cont.classList.remove('hidden');
 
-      const id = MAIN_ID && VIDEO_IDS.includes(MAIN_ID) ? MAIN_ID : (VIDEO_IDS[0]||null);
+      // ★ usa override do viewer se existir (apenas em mode=view)
+      const overrideId = getViewOverride();
+      const id = (isView && overrideId && VIDEO_IDS.includes(overrideId))
+        ? overrideId
+        : ( (MAIN_ID && VIDEO_IDS.includes(MAIN_ID)) ? MAIN_ID : (VIDEO_IDS[0]||null) );
+
       if(!id){ cont.classList.add('hidden'); return; }
 
       const idx = VIDEO_IDS.indexOf(id);
@@ -374,7 +385,7 @@
         return;
       }
 
-      const idsForGrid = VIDEO_IDS.filter(id => id !== (MAIN_ID||VIDEO_IDS[0]||null));
+      const idsForGrid = VIDEO_IDS.filter(id => id !== ( (MAIN_ID&&VIDEO_IDS.includes(MAIN_ID))?MAIN_ID:(VIDEO_IDS[0]||null) ));
 
       if(LABELS.length<VIDEO_IDS.length){ for(let i=LABELS.length;i<VIDEO_IDS.length;i++) LABELS[i]=`Equipe ${String(i+1).padStart(2,'0')}`; }
       if(LOCS.length<VIDEO_IDS.length){   for(let i=LOCS.length;i<VIDEO_IDS.length;i++)   LOCS[i]=''; }
@@ -509,12 +520,20 @@
       // salvamos tudo, incluindo MAIN_ID
       dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, main: MAIN_ID || null, ts:Date.now() });
     }
+
+    // ★ em view: só local; em edit: atualiza Firebase
     function setMain(id){
-      MAIN_ID = id;
-      // update rápido para não sobrescrever outros campos inesperadamente
-      dbRef.update({ main: id, ts:Date.now() });
-      renderAll();
+      if(isView){
+        setViewOverride(id);           // salva a preferência deste viewer
+        renderAll();
+        window.scrollTo({top:0, behavior:'smooth'});
+      }else{
+        MAIN_ID = id;
+        dbRef.update({ main: id, ts:Date.now() });
+        renderAll();
+      }
     }
+
     function subscribeRealtime(){
       dbRef.on('value', snap=>{
         const j=snap.val(); if(!j) return;
@@ -522,9 +541,8 @@
         COLS = parseInt(j.cols||COLS||2,10);
         MAIN_ID = j.main || MAIN_ID || newIds[0] || null;
 
-        const changed = JSON.stringify([VIDEO_IDS,LABELS,LOCS]) !== JSON.stringify([newIds,newLabels,newLocs]);
         VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-        renderAll(); // sempre renderizamos, pois a principal pode ter mudado
+        renderAll(); // respeita override local automaticamente em renderMain()
       });
     }
 
