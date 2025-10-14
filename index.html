@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v13.2 - independência do visualizador -->
+  <!-- build: v13.3 - fix duplicação de controles + viewer sem comandos -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -85,7 +85,7 @@
       appId: "1:769998411213:web:f0ecce2126f0af9b4a2084",
       measurementId: "G-4TVLS703CF"
     };
-    const DB_PATH='dashboards/main'; // usamos {ids,labels,locs,cols,main}
+    const DB_PATH='dashboards/main';
 
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
@@ -99,10 +99,9 @@
     let VIEW_COLS_OVERRIDE=null;
 
     let VIDEO_IDS=[], LABELS=[], LOCS=[];
-    let MAIN_ID=null; // id da live principal
+    let MAIN_ID=null;
     let YT_READY=false;
 
-    // players secundários por índice e player principal
     const players = {};
     let mainPlayer = null;
 
@@ -140,9 +139,9 @@
       try{
         const url=new URL(u);
         const list=url.searchParams.get('list');
-        if(list) return list; // playlist
+        if(list) return list;
         const v=url.searchParams.get('v');
-        if(v) return v;       // vídeo
+        if(v) return v;
         if(url.hostname.includes('youtu.be')) return url.pathname.slice(1);
       }catch(_){}
       if(typeof u==='string'){
@@ -185,7 +184,7 @@
       });
     }
 
-    /* ===== ★ Independência do visualizador ===== */
+    /* ===== Independência do visualizador ===== */
     const VIEW_MAIN_KEY = 'viewer_main_override';
     function getViewOverride(){ try{ return isView ? localStorage.getItem(VIEW_MAIN_KEY) : null; }catch(_){ return null; } }
     function setViewOverride(id){ try{ if(isView) localStorage.setItem(VIEW_MAIN_KEY, id||''); }catch(_){ } }
@@ -223,7 +222,7 @@
       `;
     }
 
-    /* ===== Botões globais (remover / qualidade / principal) ===== */
+    /* ===== Botões globais ===== */
     document.addEventListener('click', (ev)=>{
       // remover (somente editor)
       const rmBtn = ev.target.closest('[data-remove]');
@@ -235,7 +234,7 @@
         if(idx>-1){
           if(!confirm('Remover esta equipe?')) return;
           VIDEO_IDS.splice(idx,1); LABELS.splice(idx,1); LOCS.splice(idx,1);
-          if(MAIN_ID===id) MAIN_ID = VIDEO_IDS[0] || null; // se remover a principal
+          if(MAIN_ID===id) MAIN_ID = VIDEO_IDS[0] || null;
           saveRealtime();
           renderAll();
         }
@@ -269,7 +268,7 @@
         const card = ev.target.closest('.video-card');
         if(!card) return;
         const id = card.getAttribute('data-vid');
-        const idxAttr = card.getAttribute('data-idx'); // pode ser "main" ou número
+        const idxAttr = card.getAttribute('data-idx'); // "main" ou número
         const q  = qItem.getAttribute('data-q');
         saveQ(id,q);
 
@@ -307,7 +306,6 @@
       }
       cont.classList.remove('hidden');
 
-      // ★ usa override do viewer se existir (apenas em mode=view)
       const overrideId = getViewOverride();
       const id = (isView && overrideId && VIDEO_IDS.includes(overrideId))
         ? overrideId
@@ -385,7 +383,8 @@
         return;
       }
 
-      const idsForGrid = VIDEO_IDS.filter(id => id !== ( (MAIN_ID&&VIDEO_IDS.includes(MAIN_ID))?MAIN_ID:(VIDEO_IDS[0]||null) ));
+      const anchorId = ( (MAIN_ID&&VIDEO_IDS.includes(MAIN_ID))?MAIN_ID:(VIDEO_IDS[0]||null) );
+      const idsForGrid = VIDEO_IDS.filter(id => id !== anchorId);
 
       if(LABELS.length<VIDEO_IDS.length){ for(let i=LABELS.length;i<VIDEO_IDS.length;i++) LABELS[i]=`Equipe ${String(i+1).padStart(2,'0')}`; }
       if(LOCS.length<VIDEO_IDS.length){   for(let i=LOCS.length;i<VIDEO_IDS.length;i++)   LOCS[i]=''; }
@@ -500,7 +499,8 @@
     // Poll para manter overlays sincronizados
     setInterval(()=>{
       if(mainPlayer && typeof YT!=='undefined' && YT.PlayerState){
-        try{ const st = mainPlayer.getPlayerState ? mainPlayer.getPlayerState() : null;
+        try{
+          const st = mainPlayer.getPlayerState ? mainPlayer.getPlayerState() : null;
           if(st!=null){ const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING); setOfflineEl('off_main', !on); }
         }catch(_){}
       }
@@ -517,14 +517,12 @@
 
     /* ===== Realtime ===== */
     function saveRealtime(){
-      // salvamos tudo, incluindo MAIN_ID
       dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, main: MAIN_ID || null, ts:Date.now() });
     }
 
-    // ★ em view: só local; em edit: atualiza Firebase
     function setMain(id){
       if(isView){
-        setViewOverride(id);           // salva a preferência deste viewer
+        setViewOverride(id);
         renderAll();
         window.scrollTo({top:0, behavior:'smooth'});
       }else{
@@ -542,25 +540,28 @@
         MAIN_ID = j.main || MAIN_ID || newIds[0] || null;
 
         VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-        renderAll(); // respeita override local automaticamente em renderMain()
+        renderAll();
       });
     }
 
     /* ===== UI Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
-      // Mostrar/ocultar botões conforme modo
-      qs('#btnShare')?.classList.toggle('hidden', isView);
-      qs('#btnConfig')?.classList.toggle('hidden', isView);
-      qs('#btnClearAll')?.classList.toggle('hidden', isView);
+      // Esconde blocos do editor no modo visualizador
+      qsa('.editor-only').forEach(el=> el.classList.toggle('hidden', isView));
 
-      // LOGIN
-      if(auth_ok_until()<=Date.now()){
+      // LOGIN: só no editor
+      if(!isView && auth_ok_until()<=Date.now()){
         qs('#authOverlay').style.display='flex';
         qs('#authForm')?.addEventListener('submit', e=>{ e.preventDefault(); doLogin(); });
-      } else { qs('#authOverlay').style.display='none'; }
+      } else {
+        qs('#authOverlay').style.display='none';
+      }
 
       // Cabeçalho
-      qs('#btnFullscreen')?.addEventListener('click',()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
+      qs('#btnFullscreen')?.addEventListener('click',()=>{
+        if(!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+      });
 
       // Layout select:
       qs('#layout')?.addEventListener('change', ()=>{
@@ -579,7 +580,7 @@
         const id=idFromUrl(url);
         VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
         if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
-        if(!MAIN_ID) MAIN_ID = id; // define primeira como principal
+        if(!MAIN_ID) MAIN_ID = id;
         saveRealtime();
         renderAll();
         qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
@@ -606,9 +607,6 @@
       // Start RT e primeira render
       subscribeRealtime();
     });
-
-    // Garante definição única global
-    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderAll(); };
   })();
   </script>
 </head>
@@ -633,70 +631,44 @@
     </div>
   </div>
 
-<header class="p-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
-  <div class="max-w-7xl mx-auto flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-    <!-- Esquerda: Logo PMESP + Título + Logo CAVPM ao lado do título -->
-    <div class="flex items-center gap-3">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png"
-           alt="PMESP"
-           class="w-10 h-10 object-contain rounded bg-white/5 p-1">
-
+  <!-- Header -->
+  <header class="p-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <!-- Esquerda -->
       <div class="flex items-center gap-3">
-        <div>
-          <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-          <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT</p>
+        <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png"
+             alt="PMESP"
+             class="w-10 h-10 object-contain rounded bg-white/5 p-1">
+        <div class="flex items-center gap-3">
+          <div>
+            <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
+            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT</p>
+          </div>
+          <img src="qualidade%20melhor%20-Photoroom.png" alt="Comando de Aviação da PMESP"
+               class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
         </div>
+      </div>
 
-        <!-- Logo CAVPM (nome com espaços URL-encoded) -->
-        <img
-          src="qualidade%20melhor%20-Photoroom.png"
-          alt="Comando de Aviação da PMESP"
-          class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
+      <!-- Direita: controles do editor -->
+      <div id="editorControls" class="flex items-center gap-2 editor-only">
+        <label class="text-xs text-gray-400">Layout</label>
+        <select id="layout" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
+          <option value="2">2 colunas</option>
+          <option value="3">3 colunas</option>
+          <option value="4">4 colunas</option>
+        </select>
+        <button id="btnFullscreen" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Tela Cheia</button>
+        <button id="btnShare" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Gerar Link</button>
+        <button id="btnConfig" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm"
+                onclick="document.getElementById('configModal').classList.remove('hidden')">
+          Inserir Equipe
+        </button>
+        <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
+          Limpar
+        </button>
       </div>
     </div>
-
-    <!-- Direita: controles -->
-    <div class="flex items-center gap-2">
-      <label class="text-xs text-gray-400">Layout</label>
-      <select id="layout" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
-        <option value="2">2 colunas</option>
-        <option value="3">3 colunas</option>
-        <option value="4">4 colunas</option>
-      </select>
-      <button id="btnFullscreen" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Tela Cheia</button>
-      <button id="btnShare" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Gerar Link</button>
-      <button id="btnConfig" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm"
-              onclick="document.getElementById('configModal').classList.remove('hidden')">
-        Inserir Equipe
-      </button>
-      <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
-        Limpar
-      </button>
-    </div>
-  </div>
-</header>
-
-    <!-- Direita: controles -->
-    <div class="flex items-center gap-2">
-      <label class="text-xs text-gray-400">Layout</label>
-      <select id="layout" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
-        <option value="2">2 colunas</option>
-        <option value="3">3 colunas</option>
-        <option value="4">4 colunas</option>
-      </select>
-      <button id="btnFullscreen" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Tela Cheia</button>
-      <button id="btnShare" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Gerar Link</button>
-      <button id="btnConfig" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm"
-              onclick="document.getElementById('configModal').classList.remove('hidden')">
-        Inserir Equipe
-      </button>
-      <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
-        Limpar
-      </button>
-    </div>
-  </div>
-</header>
-
+  </header>
 
   <!-- Principal -->
   <section class="max-w-7xl mx-auto p-4">
@@ -740,3 +712,4 @@
 
 </body>
 </html>
+
