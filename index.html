@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v12 - playlist + OFFLINE + qualidade + remover fix -->
+  <!-- build: v13 - principal + botão tornar principal -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -16,17 +16,18 @@
     @media (max-width:640px){  .grid-container{ grid-template-columns:1fr;} }
 
     .video-card{ background:#1f2937; border-radius:12px; overflow:hidden; border:1px solid #374151; }
-    .video-box{ aspect-ratio:16/9; position:relative; cursor:move; }
+    .video-box{ aspect-ratio:16/9; position:relative; }
     .player-fill{ position:absolute; inset:0; }
     .player-fill iframe{ width:100%!important; height:100%!important; display:block; }
 
     .badge-live{ background:#dc2626; }
-    .tile-btn{ font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; }
+    .tile-btn{ font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.35); backdrop-filter:blur(2px); }
     .tile-btn:hover{ background:rgba(255,255,255,.08); }
     .drag-over{ outline:2px dashed #60a5fa; outline-offset:-6px; }
     .hidden { display:none!important; }
+    .controls { z-index:15; }
 
-    /* OFFLINE overlay: não bloqueia clique, fica abaixo dos botões */
+    /* OFFLINE overlay */
     .offline-overlay{
       position:absolute; inset:0; display:none; align-items:center; justify-content:center;
       text-align:center; padding:1rem;
@@ -39,17 +40,14 @@
       border:1px solid rgba(255,255,255,.25); border-radius:.5rem; font-size:.9rem; color:#e5e7eb;
     }
 
-    /* ===== QUALIDADE (ícone + menu) ===== */
-    .q-wrap{ position:absolute; right:.5rem; bottom:.5rem; display:flex; align-items:center; gap:.4rem; z-index:12; }
+    /* QUALIDADE */
+    .q-wrap{ position:absolute; right:.5rem; bottom:.5rem; display:flex; align-items:center; gap:.4rem; z-index:20; }
     .q-btn{ display:flex; align-items:center; gap:.35rem; font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.45); backdrop-filter:blur(2px); cursor:pointer; }
     .q-btn:hover{ background:rgba(255,255,255,.08); }
-    .q-menu{ position:absolute; right:0; bottom:2.2rem; background:#0b1220; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.35rem; display:none; z-index:20; min-width:96px; }
+    .q-menu{ position:absolute; right:0; bottom:2.2rem; background:#0b1220; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.35rem; display:none; z-index:30; min-width:96px; }
     .q-item{ display:flex; align-items:center; gap:.45rem; padding:.35rem .5rem; border-radius:.45rem; font-size:12px; cursor:pointer; white-space:nowrap; }
     .q-item:hover{ background:rgba(255,255,255,.08); }
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
-
-    /* Botões de canto (tela cheia / remover) acima do overlay */
-    .controls { z-index:15; }
   </style>
 
   <!-- YouTube API -->
@@ -63,10 +61,10 @@
     const qs=(s,e=document)=>e.querySelector(s);
     const qsa=(s,e=document)=>Array.from(e.querySelectorAll(s));
 
-    /* ===== Login universal ===== */
+    /* ===== Login ===== */
     const AUTH_USER='OPERACAOCPM';
     const AUTH_PASS='CAVPMDRONES';
-    const REMEMBER_MIN=240; // 4h
+    const REMEMBER_MIN=240;
 
     function auth_ok_until(){ const v=localStorage.getItem('auth_ok_until'); return v?parseInt(v,10):0; }
     function set_auth_ok(){ localStorage.setItem('auth_ok_until', String(Date.now()+REMEMBER_MIN*60*1000)); }
@@ -87,7 +85,7 @@
       appId: "1:769998411213:web:f0ecce2126f0af9b4a2084",
       measurementId: "G-4TVLS703CF"
     };
-    const DB_PATH='dashboards/main';
+    const DB_PATH='dashboards/main'; // usamos {ids,labels,locs,cols,main}
 
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
@@ -100,12 +98,13 @@
     let COLS=parseInt(params.get('cols')||'2',10);
     let VIEW_COLS_OVERRIDE=null;
 
-    // ids aceita playlistId ou videoId (para teste)
     let VIDEO_IDS=[], LABELS=[], LOCS=[];
+    let MAIN_ID=null; // id da live principal
     let YT_READY=false;
 
-    // Players por índice
+    // players secundários por índice e player principal
     const players = {};
+    let mainPlayer = null;
 
     /* ===== Qualidade ===== */
     const DEFAULT_QUALITY='tiny'; // 144p
@@ -120,9 +119,7 @@
       const avail=new Set(available||[]);
       if (avail.has(requested)) return requested;
       const idx=Q_ORDER.indexOf(requested);
-      if (idx>=0){
-        for(let i=idx;i>=0;i--) if (avail.has(Q_ORDER[i])) return Q_ORDER[i];
-      }
+      if (idx>=0){ for(let i=idx;i>=0;i--) if (avail.has(Q_ORDER[i])) return Q_ORDER[i]; }
       for(const q of Q_ORDER) if (avail.has(q)) return q;
       return requested;
     }
@@ -184,12 +181,12 @@
         move(LABELS,   dragSrcIndex,targetIndex);
         move(LOCS,     dragSrcIndex,targetIndex);
         saveRealtime();
-        renderGrid();
+        renderAll();
       });
     }
 
     /* ===== YouTube ===== */
-    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
+    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderAll(); };
 
     function applyGridCols(){
       const cols = (isView && VIEW_COLS_OVERRIDE!=null) ? VIEW_COLS_OVERRIDE : COLS;
@@ -220,9 +217,9 @@
       `;
     }
 
-    // Delegação global p/ botões dos cards (remove/qualidade)
+    /* ===== Botões globais (remover / qualidade / principal) ===== */
     document.addEventListener('click', (ev)=>{
-      // remover (só no editor)
+      // remover (somente editor)
       const rmBtn = ev.target.closest('[data-remove]');
       if(rmBtn && !isView){
         const card = ev.target.closest('.video-card');
@@ -232,8 +229,20 @@
         if(idx>-1){
           if(!confirm('Remover esta equipe?')) return;
           VIDEO_IDS.splice(idx,1); LABELS.splice(idx,1); LOCS.splice(idx,1);
-          saveRealtime(); renderGrid();
+          if(MAIN_ID===id) MAIN_ID = VIDEO_IDS[0] || null; // se remover a principal
+          saveRealtime();
+          renderAll();
         }
+        return;
+      }
+
+      // tornar principal (funciona em view e edit)
+      const mainBtn = ev.target.closest('[data-setmain]');
+      if(mainBtn){
+        const card = ev.target.closest('.video-card');
+        if(!card) return;
+        const id = card.getAttribute('data-vid');
+        setMain(id);
         return;
       }
 
@@ -254,11 +263,18 @@
         const card = ev.target.closest('.video-card');
         if(!card) return;
         const id = card.getAttribute('data-vid');
-        const idx = parseInt(card.getAttribute('data-idx'),10);
+        const idxAttr = card.getAttribute('data-idx'); // pode ser "main" ou número
         const q  = qItem.getAttribute('data-q');
         saveQ(id,q);
-        const player = players[idx];
-        try{ player && player.setPlaybackQuality && player.setPlaybackQuality(q); enforceQuality(player,q); }catch(_) {}
+
+        if(idxAttr==='main' && mainPlayer){
+          try{ mainPlayer.setPlaybackQuality(q); enforceQuality(mainPlayer,q); }catch(_){}
+        }else{
+          const idx = parseInt(idxAttr,10);
+          const player = players[idx];
+          try{ player && player.setPlaybackQuality && player.setPlaybackQuality(q); enforceQuality(player,q); }catch(_) {}
+        }
+
         const lbl = card.querySelector('[data-qlabel]'); if(lbl) lbl.textContent = Q_LABEL[q]||q;
         const menu = card.querySelector('[data-qmenu]'); if(menu) menu.style.display='none';
         return;
@@ -269,20 +285,102 @@
       if(!clickedInsideQ){ qsa('.q-menu').forEach(m=> m.style.display='none'); }
     });
 
+    /* ===== Render ===== */
+    function renderAll(){
+      renderMain();
+      renderGrid();
+    }
+
+    function renderMain(){
+      const cont = qs('#mainContainer');
+      cont.innerHTML='';
+
+      if(!VIDEO_IDS.length){
+        cont.classList.add('hidden');
+        return;
+      }
+      cont.classList.remove('hidden');
+
+      const id = MAIN_ID && VIDEO_IDS.includes(MAIN_ID) ? MAIN_ID : (VIDEO_IDS[0]||null);
+      if(!id){ cont.classList.add('hidden'); return; }
+
+      const idx = VIDEO_IDS.indexOf(id);
+      const label = LABELS[idx] || `Equipe ${idx+1}`;
+      const loc   = LOCS[idx]   || '';
+      const isPl  = isPlaylistId(id);
+      const fullUrl = isPl ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}` : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+      const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
+
+      const card = document.createElement('div');
+      card.className='video-card';
+      card.dataset.vid=id;
+      card.dataset.idx='main';
+
+      card.innerHTML = `
+        <div class="video-box">
+          <div id="yt_main" class="player-fill"></div>
+
+          <div class="absolute top-2 left-2 flex gap-2 controls">
+            <button class="tile-btn" data-setmain>Principal</button>
+          </div>
+
+          <div class="absolute top-2 right-2 flex gap-2 controls">
+            <button class="tile-btn" onclick="window.open('${fullUrl}','_blank')">Tela cheia</button>
+            ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
+          </div>
+
+          <div class="absolute top-2 left-24 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
+            <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO (Principal)
+          </div>
+
+          <div class="offline-overlay" id="off_main">
+            <div class="offline-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12H3"/></svg>
+              <span>OFFLINE • aguardando sinal</span>
+            </div>
+          </div>
+
+          ${qualityControlTemplate(Q_LABEL[savedQ])}
+        </div>
+
+        <div class="px-3 pt-2 pb-3 bg-gray-800/70">
+          <h3 class="font-semibold text-base">${esc(label)}</h3>
+          <p class="text-gray-400 text-sm">${esc(loc)}</p>
+        </div>
+      `;
+      cont.appendChild(card);
+
+      if(YT_READY){
+        const cfg = {
+          width:'100%', height:'100%',
+          playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
+          events:{
+            onReady:e=>onPlayerReadyMain(e, id),
+            onStateChange:e=>onPlayerStateChangeMain(e)
+          }
+        };
+        if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; } else { cfg.videoId=id; }
+        mainPlayer = new YT.Player('yt_main', cfg);
+      }
+    }
+
     function renderGrid(){
       const grid=qs('#gridContainer');
       grid.innerHTML='';
       applyGridCols();
-
-      if(LABELS.length<VIDEO_IDS.length){ for(let i=LABELS.length;i<VIDEO_IDS.length;i++) LABELS[i]=`Equipe ${String(i+1).padStart(2,'0')}`; }
-      if(LOCS.length<VIDEO_IDS.length){   for(let i=LOCS.length;i<VIDEO_IDS.length;i++)   LOCS[i]=''; }
 
       if(!VIDEO_IDS.length){
         grid.innerHTML=isView?'Aguardando configuração do operador.':'Clique em <b>Inserir Equipe</b> no topo.';
         return;
       }
 
-      VIDEO_IDS.forEach((id,i)=>{
+      const idsForGrid = VIDEO_IDS.filter(id => id !== (MAIN_ID||VIDEO_IDS[0]||null));
+
+      if(LABELS.length<VIDEO_IDS.length){ for(let i=LABELS.length;i<VIDEO_IDS.length;i++) LABELS[i]=`Equipe ${String(i+1).padStart(2,'0')}`; }
+      if(LOCS.length<VIDEO_IDS.length){   for(let i=LOCS.length;i<VIDEO_IDS.length;i++)   LOCS[i]=''; }
+
+      idsForGrid.forEach((id,i)=>{
+        const idxOriginal = VIDEO_IDS.indexOf(id);
         const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
         const isPl=isPlaylistId(id);
         const fullUrl = isPl ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}` : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
@@ -297,13 +395,17 @@
           `<div class="video-box">
              <div id="yt_${i}" class="player-fill"></div>
 
-             <div class="absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
-               <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO
+             <div class="absolute top-2 left-2 flex gap-2 controls">
+               <button class="tile-btn" data-setmain>Tornar principal</button>
              </div>
 
              <div class="absolute top-2 right-2 flex gap-2 controls">
                <button class="tile-btn" onclick="window.open('${fullUrl}','_blank')">Tela cheia</button>
                ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
+             </div>
+
+             <div class="absolute top-2 left-40 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
+               <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO
              </div>
 
              <div class="offline-overlay" id="off_${i}">
@@ -316,9 +418,9 @@
              ${qualityControlTemplate(Q_LABEL[savedQ])}
            </div>
 
-           <div class="px-2 pt-1 pb-0 bg-gray-800/70">
-             <h3 class="font-medium text-sm">${esc(LABELS[i]||'Equipe '+(i+1))}</h3>
-             <p class="text-gray-400 text-[11px]">${esc(LOCS[i]||'')}</p>
+           <div class="px-2 pt-1 pb-2 bg-gray-800/70">
+             <h3 class="font-medium text-sm">${esc(LABELS[idxOriginal]||'Equipe '+(idxOriginal+1))}</h3>
+             <p class="text-gray-400 text-[11px]">${esc(LOCS[idxOriginal]||'')}</p>
            </div>`;
 
         grid.appendChild(card);
@@ -328,7 +430,7 @@
           const playerConfig = {
             width:'100%', height:'100%',
             playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
-            events:{ onReady:e=>onPlayerReady(e, id, i), onStateChange:e=>onPlayerStateChange(e, id, i) }
+            events:{ onReady:e=>onPlayerReadyGrid(e, id, i), onStateChange:e=>onPlayerStateChangeGrid(e, i) }
           };
           if(isPl){ playerConfig.playerVars.listType='playlist'; playerConfig.playerVars.list=id; }
           else { playerConfig.videoId=id; }
@@ -337,71 +439,92 @@
       });
     }
 
-    /* ===== OFFLINE (baseado no estado do player) ===== */
-    const OFFLINE_POLL_MS = 10000; // 10s
+    /* ===== OFFLINE ===== */
+    const OFFLINE_POLL_MS = 10000;
 
-    function setOffline(idx, flag){
-      const ov = document.getElementById(`off_${idx}`);
+    function setOfflineEl(elId, flag){
+      const ov = document.getElementById(elId);
       if(ov) ov.style.display = flag ? 'flex' : 'none';
     }
-    function updateOnlineState(idx, state){
-      const online = (state===YT.PlayerState.PLAYING || state===YT.PlayerState.BUFFERING);
-      setOffline(idx, !online);
-    }
 
-    function onPlayerReady(e, id, idx){
+    // Principal
+    function onPlayerReadyMain(e, id){
       try{ e.target.mute(); e.target.playVideo(); }catch(_){}
       const desired=getSavedQ(id) || DEFAULT_QUALITY;
       const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
       const best=pickAvailableQuality(desired, avail);
       try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
       enforceQuality(e.target, best);
-
-      // atualiza label engrenagem
-      const card=qs(`#card_${idx}`);
-      const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
+      const lbl=qs('#mainContainer [data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
       if(!getSavedQ(id)) saveQ(id, best);
-
-      // começa como OFFLINE até tocar
-      setOffline(idx, true);
+      setOfflineEl('off_main', true);
     }
-
-    function onPlayerStateChange(e, id, idx){
-      if (typeof YT!=='undefined' && YT.PlayerState) updateOnlineState(idx, e.data);
-      if (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING){
-        const desired=getSavedQ(id) || DEFAULT_QUALITY;
-        const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-        const best=pickAvailableQuality(desired, avail);
-        try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
+    function onPlayerStateChangeMain(e){
+      if (typeof YT!=='undefined' && YT.PlayerState){
+        const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
+        setOfflineEl('off_main', !online);
       }
     }
 
-    // Poll adicional para sincronizar overlay com estado atual
+    // Grid
+    function onPlayerReadyGrid(e, id, idx){
+      try{ e.target.mute(); e.target.playVideo(); }catch(_){}
+      const desired=getSavedQ(id) || DEFAULT_QUALITY;
+      const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
+      const best=pickAvailableQuality(desired, avail);
+      try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
+      enforceQuality(e.target, best);
+      const card=qs(`#card_${idx}`);
+      const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
+      if(!getSavedQ(id)) saveQ(id, best);
+      setOfflineEl(`off_${idx}`, true);
+    }
+    function onPlayerStateChangeGrid(e, idx){
+      if (typeof YT!=='undefined' && YT.PlayerState){
+        const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
+        setOfflineEl(`off_${idx}`, !online);
+      }
+    }
+
+    // Poll para manter overlays sincronizados
     setInterval(()=>{
+      if(mainPlayer && typeof YT!=='undefined' && YT.PlayerState){
+        try{ const st = mainPlayer.getPlayerState ? mainPlayer.getPlayerState() : null;
+          if(st!=null){ const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING); setOfflineEl('off_main', !on); }
+        }catch(_){}
+      }
       Object.keys(players).forEach(k=>{
         const i = Number(k);
         const p = players[i];
         if(!p || typeof YT==='undefined' || !YT.PlayerState) return;
         try{
           const st = p.getPlayerState ? p.getPlayerState() : null;
-          if(st!=null){ updateOnlineState(i, st); }
+          if(st!=null){ const on=(st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING); setOfflineEl(`off_${i}`, !on); }
         }catch(_){}
       });
     }, OFFLINE_POLL_MS);
 
     /* ===== Realtime ===== */
-    function saveRealtime(){ dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() }); }
+    function saveRealtime(){
+      // salvamos tudo, incluindo MAIN_ID
+      dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, main: MAIN_ID || null, ts:Date.now() });
+    }
+    function setMain(id){
+      MAIN_ID = id;
+      // update rápido para não sobrescrever outros campos inesperadamente
+      dbRef.update({ main: id, ts:Date.now() });
+      renderAll();
+    }
     function subscribeRealtime(){
       dbRef.on('value', snap=>{
         const j=snap.val(); if(!j) return;
         const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
         COLS = parseInt(j.cols||COLS||2,10);
+        MAIN_ID = j.main || MAIN_ID || newIds[0] || null;
 
-        // Para estabilidade dos botões/menus, preferimos re-render completo
         const changed = JSON.stringify([VIDEO_IDS,LABELS,LOCS]) !== JSON.stringify([newIds,newLabels,newLocs]);
         VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-        if (changed || !YT_READY) renderGrid();
-        else applyGridCols();
+        renderAll(); // sempre renderizamos, pois a principal pode ter mudado
       });
     }
 
@@ -412,13 +535,11 @@
       qs('#btnConfig')?.classList.toggle('hidden', isView);
       qs('#btnClearAll')?.classList.toggle('hidden', isView);
 
-      // LOGIN EM QUALQUER MODO (view e edit)
+      // LOGIN
       if(auth_ok_until()<=Date.now()){
         qs('#authOverlay').style.display='flex';
         qs('#authForm')?.addEventListener('submit', e=>{ e.preventDefault(); doLogin(); });
-      } else {
-        qs('#authOverlay').style.display='none';
-      }
+      } else { qs('#authOverlay').style.display='none'; }
 
       // Cabeçalho
       qs('#btnFullscreen')?.addEventListener('click',()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
@@ -426,14 +547,8 @@
       // Layout select:
       qs('#layout')?.addEventListener('change', ()=>{
         const val = parseInt(qs('#layout').value,10)||2;
-        if(isView){
-          VIEW_COLS_OVERRIDE = val;
-          applyGridCols();
-        } else {
-          COLS = val;
-          saveRealtime();
-          applyGridCols();
-        }
+        if(isView){ VIEW_COLS_OVERRIDE = val; applyGridCols(); }
+        else { COLS = val; saveRealtime(); applyGridCols(); }
       });
 
       // Inserir equipe (editor)
@@ -446,8 +561,9 @@
         const id=idFromUrl(url);
         VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
         if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
+        if(!MAIN_ID) MAIN_ID = id; // define primeira como principal
         saveRealtime();
-        renderGrid();
+        renderAll();
         qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
       });
 
@@ -464,17 +580,17 @@
       // Limpar tudo (editor)
       qs('#btnClearAll')?.addEventListener('click', ()=>{
         if(!confirm('Apagar TODAS as equipes do dashboard?')) return;
-        VIDEO_IDS=[]; LABELS=[]; LOCS=[];
+        VIDEO_IDS=[]; LABELS=[]; LOCS=[]; MAIN_ID=null;
         saveRealtime();
-        renderGrid();
+        renderAll();
       });
 
       // Start RT e primeira render
       subscribeRealtime();
     });
 
-    // Garantir uma única definição global
-    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
+    // Garante definição única global
+    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderAll(); };
   })();
   </script>
 </head>
@@ -529,7 +645,12 @@
     </div>
   </header>
 
-  <!-- Grid -->
+  <!-- Principal -->
+  <section class="max-w-7xl mx-auto p-4">
+    <div id="mainContainer" class="video-card hidden"></div>
+  </section>
+
+  <!-- Grid secundário -->
   <main class="p-4 max-w-7xl mx-auto">
     <div id="gridContainer" class="grid-container"></div>
   </main>
@@ -546,11 +667,11 @@
           </div>
           <div>
             <label class="block text-sm mb-1">Endereço da Operação</label>
-            <input id="teamLocation" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Rua / Bairro / Ponto de referência">
+            <input id="teamLocation" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Av. Olavo Fontoura, 1078">
           </div>
           <div>
             <label class="block text-sm mb-1">URL da Playlist/Vídeo</label>
-            <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://www.youtube.com/playlist?list=PLxxxxxxx ou https://www.youtube.com/watch?v=abc123">
+            <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://www.youtube.com/playlist?list=PLxxx ou https://www.youtube.com/watch?v=abc123">
           </div>
           <div class="flex gap-3 pt-2">
             <button id="btnAddTeam" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
@@ -566,4 +687,3 @@
 
 </body>
 </html>
-
