@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v14.2 - performance lite + live-only no GRID -->
+  <!-- build: v14.3 - live-only no GRID + placeholder institucional -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Preconnect para reduzir handshake do YT -->
@@ -27,7 +27,7 @@
     .player-fill iframe{ width:100%!important; height:100%!important; display:block; }
 
     .thumb { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-    .thumb img{ width:100%; height:100%; object-fit:cover; filter:brightness(.8); }
+    .thumb img{ width:100%; height:100%; object-fit:cover; filter:brightness(.9); }
     .thumb .play{ position:absolute; width:64px; height:64px; background:#0008; border:1px solid #fff3; border-radius:999px; display:flex; align-items:center; justify-content:center; }
     .thumb .play::after{ content:''; border-left:18px solid #fff; border-top:12px solid transparent; border-bottom:12px solid transparent; margin-left:4px; }
 
@@ -61,6 +61,9 @@
     .q-item{ display:flex; align-items:center; gap:.45rem; padding:.35rem .5rem; border-radius:.45rem; font-size:12px; cursor:pointer; white-space:nowrap; }
     .q-item:hover{ background:rgba(255,255,255,.08); }
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
+
+    /* Opcional: esconde "play" quando marcado como finalizada */
+    .video-card:has([data-ended-badge]) .thumb .play { display:none !important; }
   </style>
 
   <!-- YouTube API -->
@@ -130,6 +133,10 @@
     const Q_ORDER=['tiny','small','medium','large','hd720','hd1080','highres'];
     const Q_LABEL={tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',highres:'Máx.'};
 
+    // ===== Placeholder institucional =====
+    // Coloque o arquivo "ARTE.png" na mesma pasta do index (imagem enviada por você).
+    const PLACEHOLDER_IMG = "ARTE.png";
+
     function getSavedQ(id){ return localStorage.getItem(Q_KEY_PREFIX+id); }
     function saveQ(id,q){ localStorage.setItem(Q_KEY_PREFIX+id,q); }
 
@@ -172,9 +179,10 @@
     const isPlaylistId=(id)=> typeof id==='string' && (id.startsWith('PL')||id.startsWith('UU')||id.startsWith('LL')||id.length>12);
 
     const thumbUrl=(id)=>{
-      // Para vídeo ID funciona; para playlist mostra um thumbnail genérico do YT
-      if(!id) return 'https://i.ytimg.com/img/no_thumbnail.jpg';
-      if(isPlaylistId(id)) return 'https://i.ytimg.com/img/no_thumbnail.jpg';
+      // Se não houver ID de vídeo OU for playlist, usa a ARTE institucional
+      if(!id) return PLACEHOLDER_IMG;
+      if(isPlaylistId(id)) return PLACEHOLDER_IMG;
+      // Caso seja vídeo (ID de vídeo), usa o thumb padrão do YouTube
       return `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`;
     };
 
@@ -346,19 +354,18 @@
           onReady:e=>{
             try{
               // --- LIVE-ONLY NO GRID ---
-              // Pega dados do vídeo atual (funciona para vídeo unitário e item atual da playlist)
               const info = e.target.getVideoData ? e.target.getVideoData() : {};
               const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
               const isLive = (info && info.isLiveContent) || dur === 0;
 
               if(!isLive){
-                // Não está ao vivo: não tocar.
-                // Volta thumbnail e mostra badge "FINALIZADA".
+                // Não está ao vivo: mantém thumbnail institucional e marca como finalizada
                 const card=qs(`#card_${i}`);
                 if(card){
                   const thumb=card.querySelector('[data-thumb]');
+                  const img=thumb?.querySelector('img');
                   if(thumb) thumb.classList.remove('hidden');
-                  // evita badge duplicado
+                  if(img) img.src = PLACEHOLDER_IMG; // força arte institucional
                   if(!card.querySelector('[data-ended-badge]')){
                     const badge=document.createElement('div');
                     badge.setAttribute('data-ended-badge','');
@@ -368,11 +375,11 @@
                   }
                   setOfflineEl(`off_${i}`, true);
                 }
-                // Destrói o player recém-criado para não consumir recursos.
                 try{ e.target.stopVideo && e.target.stopVideo(); }catch(_){}
-                destroyGridPlayer(i);
+                destroyGridPlayer(i); // libera banda/CPU
                 return;
               }
+
               // --- SE ESTIVER LIVE, TOCA NORMAL ---
               const cardForHide=qs(`#card_${i}`);
               const thumbToHide=cardForHide?.querySelector('[data-thumb]');
@@ -390,9 +397,8 @@
               const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
               if(!getSavedQ(id)) saveQ(id, best);
               setOfflineEl(`off_${i}`, false);
-              // marca como ativo
+
               activeGrid.add(i); touchLRU(i);
-              // lazy atributo loading
               const iframe = qs(`#${mountId} iframe`); if(iframe){ iframe.setAttribute('loading','lazy'); }
               after && after();
             }catch(_){}
@@ -401,12 +407,11 @@
             if (typeof YT!=='undefined' && YT.PlayerState){
               const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
               setOfflineEl(`off_${i}`, !online);
-              // se estiver BUFFERING muito, reduza qualidade
               if(e.data===YT.PlayerState.BUFFERING){
                 try{
                   const cur = getSavedQ(id) || DEFAULT_QUALITY;
                   const idx = Q_ORDER.indexOf(cur);
-                  if(idx>0){ // desce um degrau
+                  if(idx>0){
                     const down = Q_ORDER[idx-1];
                     saveQ(id, down);
                     players[i]?.setPlaybackQuality?.(down);
@@ -642,13 +647,12 @@
           const idx = Number(card.dataset.idx);
           const id  = card.dataset.vid;
           const isPl= isPlaylistId(id);
-          // IMPORTANTE: não escondemos a thumbnail aqui!
+          // IMPORTANTE: não escondemos a thumbnail aqui — só depois de confirmar LIVE no onReady.
           if(entry.isIntersecting){
             // cria em fila
             setTimeout(()=>{
               if(LOW_BW_MODE) return;
               if(players[idx]){ activeGrid.add(idx); touchLRU(idx); return; }
-              // NÃO esconda thumb aqui. Deixe createGridPlayer decidir.
               createGridPlayer(idx, id, isPl);
               setTimeout(()=>evictIfNeeded(), CREATE_STAGGER_MS);
             }, CREATE_STAGGER_MS * (idx%4));
@@ -832,7 +836,7 @@
         <div class="flex items-center gap-3">
           <div>
             <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v14.2 Lite</p>
+            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v14.3 Lite</p>
           </div>
           <img src="qualidade%20melhor%20-Photoroom.png" alt="Comando de Aviação da PMESP"
                class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
@@ -905,4 +909,3 @@
 
 </body>
 </html>
-
