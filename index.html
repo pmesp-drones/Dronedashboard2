@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v14.3 - live-only no GRID + placeholder institucional -->
+  <!-- build: v14.4 - live-only em todos + placeholder institucional + rótulos -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Preconnect para reduzir handshake do YT -->
@@ -26,7 +26,7 @@
     .player-fill{ position:absolute; inset:0; }
     .player-fill iframe{ width:100%!important; height:100%!important; display:block; }
 
-    .thumb { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+    .thumb { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; cursor:default; }
     .thumb img{ width:100%; height:100%; object-fit:cover; filter:brightness(.9); }
     .thumb .play{ position:absolute; width:64px; height:64px; background:#0008; border:1px solid #fff3; border-radius:999px; display:flex; align-items:center; justify-content:center; }
     .thumb .play::after{ content:''; border-left:18px solid #fff; border-top:12px solid transparent; border-bottom:12px solid transparent; margin-left:4px; }
@@ -40,7 +40,7 @@
     .hidden { display:none!important; }
     .controls { z-index:15; }
 
-    /* OFFLINE overlay */
+    /* Overlay Aguardando */
     .offline-overlay{
       position:absolute; inset:0; display:none; align-items:center; justify-content:center;
       text-align:center; padding:1rem;
@@ -62,7 +62,7 @@
     .q-item:hover{ background:rgba(255,255,255,.08); }
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
 
-    /* Opcional: esconde "play" quando marcado como finalizada */
+    /* Esconde "play" quando finalizada */
     .video-card:has([data-ended-badge]) .thumb .play { display:none !important; }
   </style>
 
@@ -125,8 +125,8 @@
 
     /* ===== Performance knobs ===== */
     const DEFAULT_QUALITY='tiny'; // 144p
-    const MAX_CONCURRENT_GRID = 4; // <= reduza/eleve conforme rede
-    const CREATE_STAGGER_MS = 250; // espalha a criação
+    const MAX_CONCURRENT_GRID = 4;
+    const CREATE_STAGGER_MS = 250;
     let LOW_BW_MODE = false;       // pausa grid
 
     const Q_KEY_PREFIX='liveQ_';
@@ -134,8 +134,7 @@
     const Q_LABEL={tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',highres:'Máx.'};
 
     // ===== Placeholder institucional =====
-    // Coloque o arquivo "ARTE.png" na mesma pasta do index (imagem enviada por você).
-    const PLACEHOLDER_IMG = "ARTE.png";
+    const PLACEHOLDER_IMG = "ARTE.png"; // coloque este arquivo na mesma pasta do index
 
     function getSavedQ(id){ return localStorage.getItem(Q_KEY_PREFIX+id); }
     function saveQ(id,q){ localStorage.setItem(Q_KEY_PREFIX+id,q); }
@@ -179,10 +178,8 @@
     const isPlaylistId=(id)=> typeof id==='string' && (id.startsWith('PL')||id.startsWith('UU')||id.startsWith('LL')||id.length>12);
 
     const thumbUrl=(id)=>{
-      // Se não houver ID de vídeo OU for playlist, usa a ARTE institucional
       if(!id) return PLACEHOLDER_IMG;
       if(isPlaylistId(id)) return PLACEHOLDER_IMG;
-      // Caso seja vídeo (ID de vídeo), usa o thumb padrão do YouTube
       return `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`;
     };
 
@@ -332,7 +329,6 @@
     }
     function evictIfNeeded(){
       while(activeGrid.size > MAX_CONCURRENT_GRID){
-        // remove o menos recente fora de viewport
         const victim = LRU.shift();
         if(victim==null) break;
         if(!activeGrid.has(victim)) continue;
@@ -342,7 +338,7 @@
 
     /* ===== Players lifecycle ===== */
     function createGridPlayer(i, id, isPl, after){
-      if(LOW_BW_MODE) return; // em modo baixa largura, não cria
+      if(LOW_BW_MODE) return;
       if(activeGrid.size >= MAX_CONCURRENT_GRID){ evictIfNeeded(); if(activeGrid.size >= MAX_CONCURRENT_GRID) return; }
 
       const mountId = `yt_${i}`;
@@ -359,13 +355,12 @@
               const isLive = (info && info.isLiveContent) || dur === 0;
 
               if(!isLive){
-                // Não está ao vivo: mantém thumbnail institucional e marca como finalizada
                 const card=qs(`#card_${i}`);
                 if(card){
                   const thumb=card.querySelector('[data-thumb]');
                   const img=thumb?.querySelector('img');
                   if(thumb) thumb.classList.remove('hidden');
-                  if(img) img.src = PLACEHOLDER_IMG; // força arte institucional
+                  if(img) img.src = PLACEHOLDER_IMG;
                   if(!card.querySelector('[data-ended-badge]')){
                     const badge=document.createElement('div');
                     badge.setAttribute('data-ended-badge','');
@@ -376,17 +371,13 @@
                   setOfflineEl(`off_${i}`, true);
                 }
                 try{ e.target.stopVideo && e.target.stopVideo(); }catch(_){}
-                destroyGridPlayer(i); // libera banda/CPU
+                destroyGridPlayer(i);
                 return;
               }
 
-              // --- SE ESTIVER LIVE, TOCA NORMAL ---
-              const cardForHide=qs(`#card_${i}`);
-              const thumbToHide=cardForHide?.querySelector('[data-thumb]');
-              if(thumbToHide) thumbToHide.classList.add('hidden');
-
-              e.target.mute();
-              e.target.playVideo();
+              // se estiver live:
+              const ch=qs(`#card_${i} [data-thumb]`); if(ch) ch.classList.add('hidden');
+              e.target.mute(); e.target.playVideo();
 
               const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
               let best=pickAvailableQuality(savedQ, avail);
@@ -429,7 +420,6 @@
       if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; }
       else { cfg.videoId=id; }
 
-      // NÃO esconda a thumbnail aqui — só escondemos depois de confirmar LIVE dentro do onReady.
       players[i] = new YT.Player(mountId, cfg);
     }
 
@@ -438,13 +428,12 @@
       if(p && p.destroy){ try{ p.destroy(); }catch(_){ } }
       players[i] = null;
       activeGrid.delete(i);
-      // volta thumbnail visível (caso exista um card)
       const card = qs(`#card_${i}`);
       if(card){
         const thumb = card.querySelector('[data-thumb]');
         const fill  = card.querySelector('.player-fill');
         if(thumb) thumb.classList.remove('hidden');
-        if(fill)  fill.innerHTML = ''; // limpa mount
+        if(fill)  fill.innerHTML = '';
       }
     }
 
@@ -453,7 +442,7 @@
       if(ov) ov.style.display = flag ? 'flex' : 'none';
     }
 
-    /* ===== Main player ===== */
+    /* ===== Main player (com live-only) ===== */
     function createMain(id){
       const isPl = isPlaylistId(id);
       const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
@@ -462,15 +451,45 @@
         playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
         events:{
           onReady:e=>{
-            try{ e.target.mute(); e.target.playVideo(); }catch(_){}
-            const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-            const best=pickAvailableQuality(savedQ, avail);
-            try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
-            enforceQuality(e.target, best);
-            const lbl=qs('#mainContainer [data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
-            if(!getSavedQ(id)) saveQ(id, best);
-            setOfflineEl('off_main', true);
-            const iframe = qs('#yt_main iframe'); if(iframe){ iframe.setAttribute('loading','lazy'); }
+            try{
+              const info = e.target.getVideoData ? e.target.getVideoData() : {};
+              const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
+              const isLive = (info && info.isLiveContent) || dur === 0;
+
+              if(!isLive){
+                const card=qs('#mainContainer');
+                const thumb=card?.querySelector('[data-thumb]');
+                const img=thumb?.querySelector('img');
+                if(thumb) thumb.classList.remove('hidden');
+                if(img) img.src = PLACEHOLDER_IMG;
+                if(!card.querySelector('[data-ended-badge]')){
+                  const badge=document.createElement('div');
+                  badge.setAttribute('data-ended-badge','');
+                  badge.className='absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-ended flex items-center gap-1';
+                  badge.innerHTML='<span class="w-2 h-2 bg-white/80 rounded-full"></span> FINALIZADA';
+                  card.querySelector('.video-box').appendChild(badge);
+                }
+                setOfflineEl('off_main', true);
+                try{ e.target.stopVideo && e.target.stopVideo(); }catch(_){}
+                // Destroy para liberar recursos; na próxima render tentará de novo
+                try{ mainPlayer && mainPlayer.destroy && mainPlayer.destroy(); }catch(_){}
+                mainPlayer = null;
+                return;
+              }
+
+              // Live: esconde thumb e toca
+              const th=qs('#mainContainer [data-thumb]'); if(th) th.classList.add('hidden');
+              e.target.mute(); e.target.playVideo();
+
+              const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
+              const best=pickAvailableQuality(savedQ, avail);
+              try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
+              enforceQuality(e.target, best);
+              const lbl=qs('#mainContainer [data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
+              if(!getSavedQ(id)) saveQ(id, best);
+              setOfflineEl('off_main', false);
+              const iframe = qs('#yt_main iframe'); if(iframe){ iframe.setAttribute('loading','lazy'); }
+            }catch(_){}
           },
           onStateChange:e=>{
             if (typeof YT!=='undefined' && YT.PlayerState){
@@ -529,8 +548,15 @@
       card.dataset.vid=id;
       card.dataset.idx='main';
 
+      const tUrl = thumbUrl(isPl ? null : id);
+
       card.innerHTML = `
         <div class="video-box">
+          <div class="thumb" data-thumb>
+            <img src="${tUrl}" alt="thumbnail" loading="lazy">
+            <div class="play"></div>
+          </div>
+
           <div id="yt_main" class="player-fill"></div>
 
           <div class="absolute top-2 left-2 flex gap-2 controls">
@@ -548,8 +574,7 @@
 
           <div class="offline-overlay" id="off_main">
             <div class="offline-badge">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12H3"/></svg>
-              <span>OFFLINE • aguardando sinal</span>
+              <span>aguardando sinal</span>
             </div>
           </div>
 
@@ -623,8 +648,7 @@
 
              <div class="offline-overlay" id="off_${i}">
                <div class="offline-badge">
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12H3"/></svg>
-                 <span>OFFLINE • aguardando sinal</span>
+                 <span>aguardando sinal</span>
                </div>
              </div>
 
@@ -647,9 +671,7 @@
           const idx = Number(card.dataset.idx);
           const id  = card.dataset.vid;
           const isPl= isPlaylistId(id);
-          // IMPORTANTE: não escondemos a thumbnail aqui — só depois de confirmar LIVE no onReady.
           if(entry.isIntersecting){
-            // cria em fila
             setTimeout(()=>{
               if(LOW_BW_MODE) return;
               if(players[idx]){ activeGrid.add(idx); touchLRU(idx); return; }
@@ -657,7 +679,6 @@
               setTimeout(()=>evictIfNeeded(), CREATE_STAGGER_MS);
             }, CREATE_STAGGER_MS * (idx%4));
           }else{
-            // destrói para liberar banda/CPU
             if(players[idx]) destroyGridPlayer(idx);
           }
         });
@@ -775,19 +796,22 @@
         renderAll();
       });
 
-      // Toggle modo baixa largura
-      qs('#btnLowBW')?.addEventListener('click', ()=>{
-        LOW_BW_MODE = !LOW_BW_MODE;
-        qs('#btnLowBW').classList.toggle('bg-green-600', LOW_BW_MODE);
-        qs('#btnLowBW').classList.toggle('bg-gray-700', !LOW_BW_MODE);
-        qs('#btnLowBW').textContent = LOW_BW_MODE ? 'Modo Baixa Largura: ON' : 'Modo Baixa Largura: OFF';
-        // destruir todos grid players quando ligar
-        if(LOW_BW_MODE){
-          Object.keys(players).forEach(k=> destroyGridPlayer(Number(k)));
-        }else{
-          renderGrid();
-        }
-      });
+      // Toggle modo baixa largura (só afeta o GRID)
+      const lowBWBtn = qs('#btnLowBW');
+      if(lowBWBtn){
+        lowBWBtn.title = "Quando ON: pausa/destrói os players do GRID para economizar banda/CPU. Quando OFF: o grid volta a carregar.";
+        lowBWBtn.addEventListener('click', ()=>{
+          LOW_BW_MODE = !LOW_BW_MODE;
+          lowBWBtn.classList.toggle('bg-green-600', LOW_BW_MODE);
+          lowBWBtn.classList.toggle('bg-gray-700', !LOW_BW_MODE);
+          lowBWBtn.textContent = LOW_BW_MODE ? 'Modo Baixa Largura: ON' : 'Modo Baixa Largura: OFF';
+          if(LOW_BW_MODE){
+            Object.keys(players).forEach(k=> destroyGridPlayer(Number(k)));
+          }else{
+            renderGrid();
+          }
+        });
+      }
 
       // Pausar grid quando a aba perde foco
       document.addEventListener('visibilitychange', ()=>{
@@ -836,7 +860,7 @@
         <div class="flex items-center gap-3">
           <div>
             <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v14.3 Lite</p>
+            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v14.4</p>
           </div>
           <img src="qualidade%20melhor%20-Photoroom.png" alt="Comando de Aviação da PMESP"
                class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
@@ -857,7 +881,7 @@
                 onclick="document.getElementById('configModal').classList.remove('hidden')">
           Inserir Equipe
         </button>
-        <button id="btnLowBW" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
+        <button id="btnLowBW" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm" title="Quando ON: pausa/destrói os players do GRID para economizar banda/CPU.">
           Modo Baixa Largura: OFF
         </button>
         <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
