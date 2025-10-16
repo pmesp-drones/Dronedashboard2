@@ -4,8 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v13.3 - fix duplicação de controles + viewer sem comandos -->
+  <!-- build: v14.2 - performance lite + live-only no GRID -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Preconnect para reduzir handshake do YT -->
+  <link rel="preconnect" href="https://www.youtube.com">
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="preconnect" href="https://s.ytimg.com">
+
   <style>
     :root { --card:#111827; }
     * { box-sizing: border-box; }
@@ -20,7 +26,14 @@
     .player-fill{ position:absolute; inset:0; }
     .player-fill iframe{ width:100%!important; height:100%!important; display:block; }
 
+    .thumb { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+    .thumb img{ width:100%; height:100%; object-fit:cover; filter:brightness(.8); }
+    .thumb .play{ position:absolute; width:64px; height:64px; background:#0008; border:1px solid #fff3; border-radius:999px; display:flex; align-items:center; justify-content:center; }
+    .thumb .play::after{ content:''; border-left:18px solid #fff; border-top:12px solid transparent; border-bottom:12px solid transparent; margin-left:4px; }
+
     .badge-live{ background:#dc2626; }
+    .badge-ended{ background:#4b5563; }
+
     .tile-btn{ font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.35); backdrop-filter:blur(2px); }
     .tile-btn:hover{ background:rgba(255,255,255,.08); }
     .drag-over{ outline:2px dashed #60a5fa; outline-offset:-6px; }
@@ -102,11 +115,17 @@
     let MAIN_ID=null;
     let YT_READY=false;
 
-    const players = {};
-    let mainPlayer = null;
+    const players = {};          // grid players
+    let mainPlayer = null;       // main player
+    const activeGrid = new Set(); // idx ativos no grid
+    const LRU = [];              // ordem de uso (idx)
 
-    /* ===== Qualidade ===== */
+    /* ===== Performance knobs ===== */
     const DEFAULT_QUALITY='tiny'; // 144p
+    const MAX_CONCURRENT_GRID = 4; // <= reduza/eleve conforme rede
+    const CREATE_STAGGER_MS = 250; // espalha a criação
+    let LOW_BW_MODE = false;       // pausa grid
+
     const Q_KEY_PREFIX='liveQ_';
     const Q_ORDER=['tiny','small','medium','large','hd720','hd1080','highres'];
     const Q_LABEL={tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',highres:'Máx.'};
@@ -152,7 +171,14 @@
     };
     const isPlaylistId=(id)=> typeof id==='string' && (id.startsWith('PL')||id.startsWith('UU')||id.startsWith('LL')||id.length>12);
 
-    /* ===== Drag & Drop (editor) ===== */
+    const thumbUrl=(id)=>{
+      // Para vídeo ID funciona; para playlist mostra um thumbnail genérico do YT
+      if(!id) return 'https://i.ytimg.com/img/no_thumbnail.jpg';
+      if(isPlaylistId(id)) return 'https://i.ytimg.com/img/no_thumbnail.jpg';
+      return `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`;
+    };
+
+    /* ===== DnD (editor) ===== */
     let dragSrcIndex=null;
     function attachDnD(cardEl){
       if(isView) return;
@@ -190,7 +216,7 @@
     function setViewOverride(id){ try{ if(isView) localStorage.setItem(VIEW_MAIN_KEY, id||''); }catch(_){ } }
     function clearViewOverride(){ try{ localStorage.removeItem(VIEW_MAIN_KEY); }catch(_){ } }
 
-    /* ===== YouTube ===== */
+    /* ===== YouTube ready ===== */
     window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderAll(); };
 
     function applyGridCols(){
@@ -222,7 +248,7 @@
       `;
     }
 
-    /* ===== Botões globais ===== */
+    /* ===== Global clicks ===== */
     document.addEventListener('click', (ev)=>{
       // remover (somente editor)
       const rmBtn = ev.target.closest('[data-remove]');
@@ -290,6 +316,182 @@
       if(!clickedInsideQ){ qsa('.q-menu').forEach(m=> m.style.display='none'); }
     });
 
+    /* ===== LRU helpers ===== */
+    function touchLRU(idx){
+      const pos = LRU.indexOf(idx);
+      if(pos>=0) LRU.splice(pos,1);
+      LRU.push(idx);
+    }
+    function evictIfNeeded(){
+      while(activeGrid.size > MAX_CONCURRENT_GRID){
+        // remove o menos recente fora de viewport
+        const victim = LRU.shift();
+        if(victim==null) break;
+        if(!activeGrid.has(victim)) continue;
+        destroyGridPlayer(victim);
+      }
+    }
+
+    /* ===== Players lifecycle ===== */
+    function createGridPlayer(i, id, isPl, after){
+      if(LOW_BW_MODE) return; // em modo baixa largura, não cria
+      if(activeGrid.size >= MAX_CONCURRENT_GRID){ evictIfNeeded(); if(activeGrid.size >= MAX_CONCURRENT_GRID) return; }
+
+      const mountId = `yt_${i}`;
+      const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
+      const cfg = {
+        width:'100%', height:'100%',
+        playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
+        events:{
+          onReady:e=>{
+            try{
+              // --- LIVE-ONLY NO GRID ---
+              // Pega dados do vídeo atual (funciona para vídeo unitário e item atual da playlist)
+              const info = e.target.getVideoData ? e.target.getVideoData() : {};
+              const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
+              const isLive = (info && info.isLiveContent) || dur === 0;
+
+              if(!isLive){
+                // Não está ao vivo: não tocar.
+                // Volta thumbnail e mostra badge "FINALIZADA".
+                const card=qs(`#card_${i}`);
+                if(card){
+                  const thumb=card.querySelector('[data-thumb]');
+                  if(thumb) thumb.classList.remove('hidden');
+                  // evita badge duplicado
+                  if(!card.querySelector('[data-ended-badge]')){
+                    const badge=document.createElement('div');
+                    badge.setAttribute('data-ended-badge','');
+                    badge.className='absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-ended flex items-center gap-1';
+                    badge.innerHTML='<span class="w-2 h-2 bg-white/80 rounded-full"></span> FINALIZADA';
+                    card.querySelector('.video-box').appendChild(badge);
+                  }
+                  setOfflineEl(`off_${i}`, true);
+                }
+                // Destrói o player recém-criado para não consumir recursos.
+                try{ e.target.stopVideo && e.target.stopVideo(); }catch(_){}
+                destroyGridPlayer(i);
+                return;
+              }
+              // --- SE ESTIVER LIVE, TOCA NORMAL ---
+              const cardForHide=qs(`#card_${i}`);
+              const thumbToHide=cardForHide?.querySelector('[data-thumb]');
+              if(thumbToHide) thumbToHide.classList.add('hidden');
+
+              e.target.mute();
+              e.target.playVideo();
+
+              const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
+              let best=pickAvailableQuality(savedQ, avail);
+              e.target.setPlaybackQuality?.(best);
+              enforceQuality(e.target, best);
+
+              const card=qs(`#card_${i}`);
+              const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
+              if(!getSavedQ(id)) saveQ(id, best);
+              setOfflineEl(`off_${i}`, false);
+              // marca como ativo
+              activeGrid.add(i); touchLRU(i);
+              // lazy atributo loading
+              const iframe = qs(`#${mountId} iframe`); if(iframe){ iframe.setAttribute('loading','lazy'); }
+              after && after();
+            }catch(_){}
+          },
+          onStateChange:e=>{
+            if (typeof YT!=='undefined' && YT.PlayerState){
+              const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
+              setOfflineEl(`off_${i}`, !online);
+              // se estiver BUFFERING muito, reduza qualidade
+              if(e.data===YT.PlayerState.BUFFERING){
+                try{
+                  const cur = getSavedQ(id) || DEFAULT_QUALITY;
+                  const idx = Q_ORDER.indexOf(cur);
+                  if(idx>0){ // desce um degrau
+                    const down = Q_ORDER[idx-1];
+                    saveQ(id, down);
+                    players[i]?.setPlaybackQuality?.(down);
+                    enforceQuality(players[i], down, 6, 800);
+                    const card=qs(`#card_${i}`);
+                    const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[down]||down;
+                  }
+                }catch(_){}
+              }
+            }
+            touchLRU(i);
+          }
+        }
+      };
+      if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; }
+      else { cfg.videoId=id; }
+
+      // NÃO esconda a thumbnail aqui — só escondemos depois de confirmar LIVE dentro do onReady.
+      players[i] = new YT.Player(mountId, cfg);
+    }
+
+    function destroyGridPlayer(i){
+      const p = players[i];
+      if(p && p.destroy){ try{ p.destroy(); }catch(_){ } }
+      players[i] = null;
+      activeGrid.delete(i);
+      // volta thumbnail visível (caso exista um card)
+      const card = qs(`#card_${i}`);
+      if(card){
+        const thumb = card.querySelector('[data-thumb]');
+        const fill  = card.querySelector('.player-fill');
+        if(thumb) thumb.classList.remove('hidden');
+        if(fill)  fill.innerHTML = ''; // limpa mount
+      }
+    }
+
+    function setOfflineEl(elId, flag){
+      const ov = document.getElementById(elId);
+      if(ov) ov.style.display = flag ? 'flex' : 'none';
+    }
+
+    /* ===== Main player ===== */
+    function createMain(id){
+      const isPl = isPlaylistId(id);
+      const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
+      const cfg = {
+        width:'100%', height:'100%',
+        playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
+        events:{
+          onReady:e=>{
+            try{ e.target.mute(); e.target.playVideo(); }catch(_){}
+            const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
+            const best=pickAvailableQuality(savedQ, avail);
+            try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
+            enforceQuality(e.target, best);
+            const lbl=qs('#mainContainer [data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
+            if(!getSavedQ(id)) saveQ(id, best);
+            setOfflineEl('off_main', true);
+            const iframe = qs('#yt_main iframe'); if(iframe){ iframe.setAttribute('loading','lazy'); }
+          },
+          onStateChange:e=>{
+            if (typeof YT!=='undefined' && YT.PlayerState){
+              const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
+              setOfflineEl('off_main', !online);
+              if(e.data===YT.PlayerState.BUFFERING){
+                try{
+                  const cur = getSavedQ(id) || DEFAULT_QUALITY;
+                  const idx = Q_ORDER.indexOf(cur);
+                  if(idx>0){
+                    const down = Q_ORDER[idx-1];
+                    saveQ(id, down);
+                    mainPlayer?.setPlaybackQuality?.(down);
+                    enforceQuality(mainPlayer, down, 6, 800);
+                    const lbl=qs('#mainContainer [data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[down]||down;
+                  }
+                }catch(_){}
+              }
+            }
+          }
+        }
+      };
+      if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; } else { cfg.videoId=id; }
+      mainPlayer = new YT.Player('yt_main', cfg);
+    }
+
     /* ===== Render ===== */
     function renderAll(){
       renderMain();
@@ -300,10 +502,7 @@
       const cont = qs('#mainContainer');
       cont.innerHTML='';
 
-      if(!VIDEO_IDS.length){
-        cont.classList.add('hidden');
-        return;
-      }
+      if(!VIDEO_IDS.length){ cont.classList.add('hidden'); return; }
       cont.classList.remove('hidden');
 
       const overrideId = getViewOverride();
@@ -359,24 +558,17 @@
       `;
       cont.appendChild(card);
 
-      if(YT_READY){
-        const cfg = {
-          width:'100%', height:'100%',
-          playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
-          events:{
-            onReady:e=>onPlayerReadyMain(e, id),
-            onStateChange:e=>onPlayerStateChangeMain(e)
-          }
-        };
-        if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; } else { cfg.videoId=id; }
-        mainPlayer = new YT.Player('yt_main', cfg);
-      }
+      if(YT_READY) createMain(id);
     }
 
     function renderGrid(){
       const grid=qs('#gridContainer');
       grid.innerHTML='';
       applyGridCols();
+
+      // destrói todos os players ativos do grid antes de re-render
+      Object.keys(players).forEach(k=> destroyGridPlayer(Number(k)));
+      activeGrid.clear(); LRU.length=0;
 
       if(!VIDEO_IDS.length){
         grid.innerHTML=isView?'Aguardando configuração do operador.':'Clique em <b>Inserir Equipe</b> no topo.';
@@ -401,8 +593,14 @@
         card.dataset.vid=id;
         card.id=`card_${i}`;
 
+        const tUrl = thumbUrl(isPl ? null : id);
+
         card.innerHTML=
           `<div class="video-box">
+             <div class="thumb" data-thumb>
+               <img src="${tUrl}" alt="thumbnail" loading="lazy">
+               <div class="play"></div>
+             </div>
              <div id="yt_${i}" class="player-fill"></div>
 
              <div class="absolute top-2 left-2 flex gap-2 controls">
@@ -435,68 +633,37 @@
 
         grid.appendChild(card);
         attachDnD(card);
-
-        if(YT_READY){
-          const playerConfig = {
-            width:'100%', height:'100%',
-            playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
-            events:{ onReady:e=>onPlayerReadyGrid(e, id, i), onStateChange:e=>onPlayerStateChangeGrid(e, i) }
-          };
-          if(isPl){ playerConfig.playerVars.listType='playlist'; playerConfig.playerVars.list=id; }
-          else { playerConfig.videoId=id; }
-          players[i] = new YT.Player(`yt_${i}`, playerConfig);
-        }
       });
+
+      // IntersectionObserver para criar/destruir players conforme visibilidade
+      const io = new IntersectionObserver((entries)=>{
+        entries.forEach(entry=>{
+          const card = entry.target;
+          const idx = Number(card.dataset.idx);
+          const id  = card.dataset.vid;
+          const isPl= isPlaylistId(id);
+          // IMPORTANTE: não escondemos a thumbnail aqui!
+          if(entry.isIntersecting){
+            // cria em fila
+            setTimeout(()=>{
+              if(LOW_BW_MODE) return;
+              if(players[idx]){ activeGrid.add(idx); touchLRU(idx); return; }
+              // NÃO esconda thumb aqui. Deixe createGridPlayer decidir.
+              createGridPlayer(idx, id, isPl);
+              setTimeout(()=>evictIfNeeded(), CREATE_STAGGER_MS);
+            }, CREATE_STAGGER_MS * (idx%4));
+          }else{
+            // destrói para liberar banda/CPU
+            if(players[idx]) destroyGridPlayer(idx);
+          }
+        });
+      }, { rootMargin:'100px 0px', threshold:0.1 });
+
+      qsa('.video-card[data-idx]').forEach(card=> io.observe(card));
     }
 
-    /* ===== OFFLINE ===== */
+    /* ===== OFFLINE sync (principal + grid) ===== */
     const OFFLINE_POLL_MS = 10000;
-
-    function setOfflineEl(elId, flag){
-      const ov = document.getElementById(elId);
-      if(ov) ov.style.display = flag ? 'flex' : 'none';
-    }
-
-    // Principal
-    function onPlayerReadyMain(e, id){
-      try{ e.target.mute(); e.target.playVideo(); }catch(_){}
-      const desired=getSavedQ(id) || DEFAULT_QUALITY;
-      const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-      const best=pickAvailableQuality(desired, avail);
-      try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
-      enforceQuality(e.target, best);
-      const lbl=qs('#mainContainer [data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
-      if(!getSavedQ(id)) saveQ(id, best);
-      setOfflineEl('off_main', true);
-    }
-    function onPlayerStateChangeMain(e){
-      if (typeof YT!=='undefined' && YT.PlayerState){
-        const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
-        setOfflineEl('off_main', !online);
-      }
-    }
-
-    // Grid
-    function onPlayerReadyGrid(e, id, idx){
-      try{ e.target.mute(); e.target.playVideo(); }catch(_){}
-      const desired=getSavedQ(id) || DEFAULT_QUALITY;
-      const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-      const best=pickAvailableQuality(desired, avail);
-      try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
-      enforceQuality(e.target, best);
-      const card=qs(`#card_${idx}`);
-      const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
-      if(!getSavedQ(id)) saveQ(id, best);
-      setOfflineEl(`off_${idx}`, true);
-    }
-    function onPlayerStateChangeGrid(e, idx){
-      if (typeof YT!=='undefined' && YT.PlayerState){
-        const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
-        setOfflineEl(`off_${idx}`, !online);
-      }
-    }
-
-    // Poll para manter overlays sincronizados
     setInterval(()=>{
       if(mainPlayer && typeof YT!=='undefined' && YT.PlayerState){
         try{
@@ -604,6 +771,29 @@
         renderAll();
       });
 
+      // Toggle modo baixa largura
+      qs('#btnLowBW')?.addEventListener('click', ()=>{
+        LOW_BW_MODE = !LOW_BW_MODE;
+        qs('#btnLowBW').classList.toggle('bg-green-600', LOW_BW_MODE);
+        qs('#btnLowBW').classList.toggle('bg-gray-700', !LOW_BW_MODE);
+        qs('#btnLowBW').textContent = LOW_BW_MODE ? 'Modo Baixa Largura: ON' : 'Modo Baixa Largura: OFF';
+        // destruir todos grid players quando ligar
+        if(LOW_BW_MODE){
+          Object.keys(players).forEach(k=> destroyGridPlayer(Number(k)));
+        }else{
+          renderGrid();
+        }
+      });
+
+      // Pausar grid quando a aba perde foco
+      document.addEventListener('visibilitychange', ()=>{
+        if(document.hidden){
+          Object.keys(players).forEach(k=> destroyGridPlayer(Number(k)));
+        }else{
+          renderGrid();
+        }
+      });
+
       // Start RT e primeira render
       subscribeRealtime();
     });
@@ -642,7 +832,7 @@
         <div class="flex items-center gap-3">
           <div>
             <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT</p>
+            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v14.2 Lite</p>
           </div>
           <img src="qualidade%20melhor%20-Photoroom.png" alt="Comando de Aviação da PMESP"
                class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
@@ -662,6 +852,9 @@
         <button id="btnConfig" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm"
                 onclick="document.getElementById('configModal').classList.remove('hidden')">
           Inserir Equipe
+        </button>
+        <button id="btnLowBW" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
+          Modo Baixa Largura: OFF
         </button>
         <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
           Limpar
