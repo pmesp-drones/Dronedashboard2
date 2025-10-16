@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v14.4 - live-only em todos + placeholder institucional + rótulos -->
+  <!-- build: v14.5 - live-only + badge AO VIVO real + arte institucional fixa -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Preconnect para reduzir handshake do YT -->
@@ -27,12 +27,7 @@
     .player-fill iframe{ width:100%!important; height:100%!important; display:block; }
 
     .thumb { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; cursor:default; }
-    .thumb img{ width:100%; height:100%; object-fit:cover; filter:brightness(.9); }
-    .thumb .play{ position:absolute; width:64px; height:64px; background:#0008; border:1px solid #fff3; border-radius:999px; display:flex; align-items:center; justify-content:center; }
-    .thumb .play::after{ content:''; border-left:18px solid #fff; border-top:12px solid transparent; border-bottom:12px solid transparent; margin-left:4px; }
-
-    .badge-live{ background:#dc2626; }
-    .badge-ended{ background:#4b5563; }
+    .thumb img{ width:100%; height:100%; object-fit:cover; filter:brightness(.92); }
 
     .tile-btn{ font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.35); backdrop-filter:blur(2px); }
     .tile-btn:hover{ background:rgba(255,255,255,.08); }
@@ -42,15 +37,30 @@
 
     /* Overlay Aguardando */
     .offline-overlay{
-      position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       text-align:center; padding:1rem;
-      background:linear-gradient(180deg, rgba(17,24,39,0.25), rgba(17,24,39,0.85));
-      backdrop-filter:blur(2px);
+      background:linear-gradient(180deg, rgba(17,24,39,0.20), rgba(17,24,39,0.75));
+      backdrop-filter:blur(1.5px);
       pointer-events:none; z-index:9;
     }
     .offline-badge{
       display:inline-flex; align-items:center; gap:.5rem; padding:.5rem .75rem;
       border:1px solid rgba(255,255,255,.25); border-radius:.5rem; font-size:.9rem; color:#e5e7eb;
+    }
+
+    /* Selo AO VIVO (aparece só quando live=true) */
+    .live-badge{
+      position:absolute; top:.5rem; left:.5rem;
+      display:none; align-items:center; gap:.35rem;
+      padding:.25rem .5rem; font-size:.7rem; border-radius:.45rem;
+      background:#dc2626; /* vermelho */
+      z-index:12;
+    }
+    .live-dot{ width:.45rem; height:.45rem; border-radius:999px; background:white; animation:pulse 1.2s infinite; }
+    @keyframes pulse{
+      0%{opacity:.4; transform:scale(.8)}
+      50%{opacity:1; transform:scale(1)}
+      100%{opacity:.4; transform:scale(.8)}
     }
 
     /* QUALIDADE */
@@ -61,9 +71,6 @@
     .q-item{ display:flex; align-items:center; gap:.45rem; padding:.35rem .5rem; border-radius:.45rem; font-size:12px; cursor:pointer; white-space:nowrap; }
     .q-item:hover{ background:rgba(255,255,255,.08); }
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
-
-    /* Esconde "play" quando finalizada */
-    .video-card:has([data-ended-badge]) .thumb .play { display:none !important; }
   </style>
 
   <!-- YouTube API -->
@@ -118,10 +125,10 @@
     let MAIN_ID=null;
     let YT_READY=false;
 
-    const players = {};          // grid players
-    let mainPlayer = null;       // main player
-    const activeGrid = new Set(); // idx ativos no grid
-    const LRU = [];              // ordem de uso (idx)
+    const players = {};            // grid players
+    let mainPlayer = null;         // main player
+    const activeGrid = new Set();  // idx ativos no grid
+    const LRU = [];                // ordem de uso (idx)
 
     /* ===== Performance knobs ===== */
     const DEFAULT_QUALITY='tiny'; // 144p
@@ -133,8 +140,9 @@
     const Q_ORDER=['tiny','small','medium','large','hd720','hd1080','highres'];
     const Q_LABEL={tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',highres:'Máx.'};
 
-    // ===== Placeholder institucional =====
+    // ===== Placeholder institucional (sempre usa a arte para evitar flicker) =====
     const PLACEHOLDER_IMG = "ARTE.png"; // coloque este arquivo na mesma pasta do index
+    const thumbUrl=(_id)=> PLACEHOLDER_IMG;
 
     function getSavedQ(id){ return localStorage.getItem(Q_KEY_PREFIX+id); }
     function saveQ(id,q){ localStorage.setItem(Q_KEY_PREFIX+id,q); }
@@ -177,13 +185,7 @@
     };
     const isPlaylistId=(id)=> typeof id==='string' && (id.startsWith('PL')||id.startsWith('UU')||id.startsWith('LL')||id.length>12);
 
-    const thumbUrl=(id)=>{
-      if(!id) return PLACEHOLDER_IMG;
-      if(isPlaylistId(id)) return PLACEHOLDER_IMG;
-      return `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`;
-    };
-
-    /* ===== DnD (editor) ===== */
+    /* ===== Drag & drop (editor) ===== */
     let dragSrcIndex=null;
     function attachDnD(cardEl){
       if(isView) return;
@@ -215,11 +217,24 @@
       });
     }
 
-    /* ===== Independência do visualizador ===== */
-    const VIEW_MAIN_KEY = 'viewer_main_override';
+    /* ===== Visualizador independente ===== */
+    const VIEW_MAIN_KEY='viewer_main_override';
     function getViewOverride(){ try{ return isView ? localStorage.getItem(VIEW_MAIN_KEY) : null; }catch(_){ return null; } }
     function setViewOverride(id){ try{ if(isView) localStorage.setItem(VIEW_MAIN_KEY, id||''); }catch(_){ } }
-    function clearViewOverride(){ try{ localStorage.removeItem(VIEW_MAIN_KEY); }catch(_){ } }
+
+    /* ===== Helper de badge AO VIVO ===== */
+    function setLiveBadge(cardEl, flag){
+      if(!cardEl) return;
+      let badge = cardEl.querySelector('[data-live-badge]');
+      if(!badge){
+        badge = document.createElement('div');
+        badge.className='live-badge';
+        badge.setAttribute('data-live-badge','');
+        badge.innerHTML = '<span class="live-dot"></span><span>AO VIVO</span>';
+        cardEl.querySelector('.video-box').appendChild(badge);
+      }
+      badge.style.display = flag ? 'inline-flex' : 'none';
+    }
 
     /* ===== YouTube ready ===== */
     window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderAll(); };
@@ -255,7 +270,6 @@
 
     /* ===== Global clicks ===== */
     document.addEventListener('click', (ev)=>{
-      // remover (somente editor)
       const rmBtn = ev.target.closest('[data-remove]');
       if(rmBtn && !isView){
         const card = ev.target.closest('.video-card');
@@ -266,23 +280,19 @@
           if(!confirm('Remover esta equipe?')) return;
           VIDEO_IDS.splice(idx,1); LABELS.splice(idx,1); LOCS.splice(idx,1);
           if(MAIN_ID===id) MAIN_ID = VIDEO_IDS[0] || null;
-          saveRealtime();
-          renderAll();
+          saveRealtime(); renderAll();
         }
         return;
       }
 
-      // tornar principal (view e edit)
       const mainBtn = ev.target.closest('[data-setmain]');
       if(mainBtn){
         const card = ev.target.closest('.video-card');
         if(!card) return;
         const id = card.getAttribute('data-vid');
-        setMain(id);
-        return;
+        setMain(id); return;
       }
 
-      // abrir/fechar menu de qualidade
       const qBtn = ev.target.closest('[data-qbtn]');
       if(qBtn){
         const menu = qBtn.parentElement.querySelector('[data-qmenu]');
@@ -293,7 +303,6 @@
         return;
       }
 
-      // escolher qualidade
       const qItem = ev.target.closest('.q-item');
       if(qItem){
         const card = ev.target.closest('.video-card');
@@ -316,7 +325,6 @@
         return;
       }
 
-      // clique fora fecha menus
       const clickedInsideQ = ev.target.closest('.q-wrap');
       if(!clickedInsideQ){ qsa('.q-menu').forEach(m=> m.style.display='none'); }
     });
@@ -337,67 +345,53 @@
     }
 
     /* ===== Players lifecycle ===== */
-    function createGridPlayer(i, id, isPl, after){
+    function createGridPlayer(i, id, isPl){
       if(LOW_BW_MODE) return;
       if(activeGrid.size >= MAX_CONCURRENT_GRID){ evictIfNeeded(); if(activeGrid.size >= MAX_CONCURRENT_GRID) return; }
 
       const mountId = `yt_${i}`;
       const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
+
       const cfg = {
         width:'100%', height:'100%',
         playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
         events:{
           onReady:e=>{
             try{
-              // --- LIVE-ONLY NO GRID ---
               const info = e.target.getVideoData ? e.target.getVideoData() : {};
               const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
               const isLive = (info && info.isLiveContent) || dur === 0;
 
+              const card=qs(`#card_${i}`);
+              setLiveBadge(card, !!isLive);
+
               if(!isLive){
-                const card=qs(`#card_${i}`);
-                if(card){
-                  const thumb=card.querySelector('[data-thumb]');
-                  const img=thumb?.querySelector('img');
-                  if(thumb) thumb.classList.remove('hidden');
-                  if(img) img.src = PLACEHOLDER_IMG;
-                  if(!card.querySelector('[data-ended-badge]')){
-                    const badge=document.createElement('div');
-                    badge.setAttribute('data-ended-badge','');
-                    badge.className='absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-ended flex items-center gap-1';
-                    badge.innerHTML='<span class="w-2 h-2 bg-white/80 rounded-full"></span> FINALIZADA';
-                    card.querySelector('.video-box').appendChild(badge);
-                  }
-                  setOfflineEl(`off_${i}`, true);
-                }
-                try{ e.target.stopVideo && e.target.stopVideo(); }catch(_){}
+                setOfflineEl(`off_${i}`, true);
                 destroyGridPlayer(i);
                 return;
               }
 
-              // se estiver live:
-              const ch=qs(`#card_${i} [data-thumb]`); if(ch) ch.classList.add('hidden');
               e.target.mute(); e.target.playVideo();
-
               const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
               let best=pickAvailableQuality(savedQ, avail);
               e.target.setPlaybackQuality?.(best);
               enforceQuality(e.target, best);
 
-              const card=qs(`#card_${i}`);
               const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
               if(!getSavedQ(id)) saveQ(id, best);
               setOfflineEl(`off_${i}`, false);
 
               activeGrid.add(i); touchLRU(i);
               const iframe = qs(`#${mountId} iframe`); if(iframe){ iframe.setAttribute('loading','lazy'); }
-              after && after();
             }catch(_){}
           },
           onStateChange:e=>{
             if (typeof YT!=='undefined' && YT.PlayerState){
               const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
               setOfflineEl(`off_${i}`, !online);
+              if(e.data===YT.PlayerState.ENDED){
+                setLiveBadge(qs(`#card_${i}`), false);
+              }
               if(e.data===YT.PlayerState.BUFFERING){
                 try{
                   const cur = getSavedQ(id) || DEFAULT_QUALITY;
@@ -430,10 +424,9 @@
       activeGrid.delete(i);
       const card = qs(`#card_${i}`);
       if(card){
-        const thumb = card.querySelector('[data-thumb]');
         const fill  = card.querySelector('.player-fill');
-        if(thumb) thumb.classList.remove('hidden');
         if(fill)  fill.innerHTML = '';
+        setLiveBadge(card, false);
       }
     }
 
@@ -442,10 +435,11 @@
       if(ov) ov.style.display = flag ? 'flex' : 'none';
     }
 
-    /* ===== Main player (com live-only) ===== */
+    /* ===== Main player (live-only + badge) ===== */
     function createMain(id){
       const isPl = isPlaylistId(id);
       const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
+
       const cfg = {
         width:'100%', height:'100%',
         playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
@@ -456,29 +450,16 @@
               const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
               const isLive = (info && info.isLiveContent) || dur === 0;
 
+              const cont=qs('#mainContainer');
+              setLiveBadge(cont, !!isLive);
+
               if(!isLive){
-                const card=qs('#mainContainer');
-                const thumb=card?.querySelector('[data-thumb]');
-                const img=thumb?.querySelector('img');
-                if(thumb) thumb.classList.remove('hidden');
-                if(img) img.src = PLACEHOLDER_IMG;
-                if(!card.querySelector('[data-ended-badge]')){
-                  const badge=document.createElement('div');
-                  badge.setAttribute('data-ended-badge','');
-                  badge.className='absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-ended flex items-center gap-1';
-                  badge.innerHTML='<span class="w-2 h-2 bg-white/80 rounded-full"></span> FINALIZADA';
-                  card.querySelector('.video-box').appendChild(badge);
-                }
                 setOfflineEl('off_main', true);
-                try{ e.target.stopVideo && e.target.stopVideo(); }catch(_){}
-                // Destroy para liberar recursos; na próxima render tentará de novo
                 try{ mainPlayer && mainPlayer.destroy && mainPlayer.destroy(); }catch(_){}
                 mainPlayer = null;
                 return;
               }
 
-              // Live: esconde thumb e toca
-              const th=qs('#mainContainer [data-thumb]'); if(th) th.classList.add('hidden');
               e.target.mute(); e.target.playVideo();
 
               const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
@@ -495,6 +476,9 @@
             if (typeof YT!=='undefined' && YT.PlayerState){
               const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
               setOfflineEl('off_main', !online);
+              if(e.data===YT.PlayerState.ENDED){
+                setLiveBadge(qs('#mainContainer'), false);
+              }
               if(e.data===YT.PlayerState.BUFFERING){
                 try{
                   const cur = getSavedQ(id) || DEFAULT_QUALITY;
@@ -548,28 +532,25 @@
       card.dataset.vid=id;
       card.dataset.idx='main';
 
-      const tUrl = thumbUrl(isPl ? null : id);
+      const tUrl = thumbUrl(id);
 
       card.innerHTML = `
         <div class="video-box">
+          <!-- thumb institucional fixa -->
           <div class="thumb" data-thumb>
-            <img src="${tUrl}" alt="thumbnail" loading="lazy">
-            <div class="play"></div>
+            <img src="${tUrl}" alt="thumbnail institucional" loading="lazy">
+          </div>
+
+          <!-- selo AO VIVO aparece só quando live -->
+          <div class="live-badge" data-live-badge style="display:none;">
+            <span class="live-dot"></span><span>AO VIVO</span>
           </div>
 
           <div id="yt_main" class="player-fill"></div>
 
-          <div class="absolute top-2 left-2 flex gap-2 controls">
-            <button class="tile-btn" data-setmain>Principal</button>
-          </div>
-
           <div class="absolute top-2 right-2 flex gap-2 controls">
             <button class="tile-btn" onclick="window.open('${fullUrl}','_blank')">Tela cheia</button>
             ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
-          </div>
-
-          <div class="absolute top-2 left-24 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
-            <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO (Principal)
           </div>
 
           <div class="offline-overlay" id="off_main">
@@ -623,33 +604,27 @@
         card.dataset.vid=id;
         card.id=`card_${i}`;
 
-        const tUrl = thumbUrl(isPl ? null : id);
+        const tUrl = thumbUrl(id);
 
         card.innerHTML=
           `<div class="video-box">
              <div class="thumb" data-thumb>
-               <img src="${tUrl}" alt="thumbnail" loading="lazy">
-               <div class="play"></div>
+               <img src="${tUrl}" alt="thumbnail institucional" loading="lazy">
              </div>
-             <div id="yt_${i}" class="player-fill"></div>
 
-             <div class="absolute top-2 left-2 flex gap-2 controls">
-               <button class="tile-btn" data-setmain>Tornar principal</button>
+             <div class="live-badge" data-live-badge style="display:none;">
+               <span class="live-dot"></span><span>AO VIVO</span>
              </div>
+
+             <div id="yt_${i}" class="player-fill"></div>
 
              <div class="absolute top-2 right-2 flex gap-2 controls">
                <button class="tile-btn" onclick="window.open('${fullUrl}','_blank')">Tela cheia</button>
                ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
              </div>
 
-             <div class="absolute top-2 left-40 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
-               <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO
-             </div>
-
              <div class="offline-overlay" id="off_${i}">
-               <div class="offline-badge">
-                 <span>aguardando sinal</span>
-               </div>
+               <div class="offline-badge"><span>aguardando sinal</span></div>
              </div>
 
              ${qualityControlTemplate(Q_LABEL[savedQ])}
@@ -693,7 +668,11 @@
       if(mainPlayer && typeof YT!=='undefined' && YT.PlayerState){
         try{
           const st = mainPlayer.getPlayerState ? mainPlayer.getPlayerState() : null;
-          if(st!=null){ const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING); setOfflineEl('off_main', !on); }
+          if(st!=null){
+            const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING);
+            setOfflineEl('off_main', !on);
+            if(!on) setLiveBadge(qs('#mainContainer'), false);
+          }
         }catch(_){}
       }
       Object.keys(players).forEach(k=>{
@@ -702,7 +681,9 @@
         if(!p || typeof YT==='undefined' || !YT.PlayerState) return;
         try{
           const st = p.getPlayerState ? p.getPlayerState() : null;
-          if(st!=null){ const on=(st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING); setOfflineEl(`off_${i}`, !on); }
+          const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING);
+          setOfflineEl(`off_${i}`, !on);
+          if(!on) setLiveBadge(qs(`#card_${i}`), false);
         }catch(_){}
       });
     }, OFFLINE_POLL_MS);
@@ -738,10 +719,8 @@
 
     /* ===== UI Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
-      // Esconde blocos do editor no modo visualizador
       qsa('.editor-only').forEach(el=> el.classList.toggle('hidden', isView));
 
-      // LOGIN: só no editor
       if(!isView && auth_ok_until()<=Date.now()){
         qs('#authOverlay').style.display='flex';
         qs('#authForm')?.addEventListener('submit', e=>{ e.preventDefault(); doLogin(); });
@@ -749,20 +728,17 @@
         qs('#authOverlay').style.display='none';
       }
 
-      // Cabeçalho
       qs('#btnFullscreen')?.addEventListener('click',()=>{
         if(!document.fullscreenElement) document.documentElement.requestFullscreen();
         else document.exitFullscreen();
       });
 
-      // Layout select:
       qs('#layout')?.addEventListener('change', ()=>{
         const val = parseInt(qs('#layout').value,10)||2;
         if(isView){ VIEW_COLS_OVERRIDE = val; applyGridCols(); }
         else { COLS = val; saveRealtime(); applyGridCols(); }
       });
 
-      // Inserir equipe (editor)
       qs('#btnAddTeam')?.addEventListener('click', e=>{
         e.preventDefault();
         const name=qs('#teamName').value.trim();
@@ -773,12 +749,10 @@
         VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
         if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
         if(!MAIN_ID) MAIN_ID = id;
-        saveRealtime();
-        renderAll();
+        saveRealtime(); renderAll();
         qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
       });
 
-      // Share link (editor)
       qs('#btnShare')?.addEventListener('click', ()=>{
         const base=location.origin+location.pathname;
         const url=new URL(base);
@@ -788,18 +762,15 @@
         navigator.clipboard.writeText(url.toString()).then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
       });
 
-      // Limpar tudo (editor)
       qs('#btnClearAll')?.addEventListener('click', ()=>{
         if(!confirm('Apagar TODAS as equipes do dashboard?')) return;
         VIDEO_IDS=[]; LABELS=[]; LOCS=[]; MAIN_ID=null;
-        saveRealtime();
-        renderAll();
+        saveRealtime(); renderAll();
       });
 
-      // Toggle modo baixa largura (só afeta o GRID)
       const lowBWBtn = qs('#btnLowBW');
       if(lowBWBtn){
-        lowBWBtn.title = "Quando ON: pausa/destrói os players do GRID para economizar banda/CPU. Quando OFF: o grid volta a carregar.";
+        lowBWBtn.title = "Quando ON: pausa/destrói os players do GRID para economizar banda/CPU. O principal continua normal.";
         lowBWBtn.addEventListener('click', ()=>{
           LOW_BW_MODE = !LOW_BW_MODE;
           lowBWBtn.classList.toggle('bg-green-600', LOW_BW_MODE);
@@ -813,7 +784,6 @@
         });
       }
 
-      // Pausar grid quando a aba perde foco
       document.addEventListener('visibilitychange', ()=>{
         if(document.hidden){
           Object.keys(players).forEach(k=> destroyGridPlayer(Number(k)));
@@ -822,7 +792,6 @@
         }
       });
 
-      // Start RT e primeira render
       subscribeRealtime();
     });
   })();
@@ -860,7 +829,7 @@
         <div class="flex items-center gap-3">
           <div>
             <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v14.4</p>
+            <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v14.5</p>
           </div>
           <img src="qualidade%20melhor%20-Photoroom.png" alt="Comando de Aviação da PMESP"
                class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
@@ -881,7 +850,7 @@
                 onclick="document.getElementById('configModal').classList.remove('hidden')">
           Inserir Equipe
         </button>
-        <button id="btnLowBW" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm" title="Quando ON: pausa/destrói os players do GRID para economizar banda/CPU.">
+        <button id="btnLowBW" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm" title="Quando ON: pausa/destrói os players do GRID para economizar banda/CPU. O principal continua normal.">
           Modo Baixa Largura: OFF
         </button>
         <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
