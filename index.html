@@ -4,58 +4,117 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v9-rt-plus-viewcols+clear -->
+  <!-- build: v15.8 - CPAs 6/7/8/12 + limite 4 lives por painel + botão Inserir desabilita a partir de 4 -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Preconnect -->
+  <link rel="preconnect" href="https://www.youtube.com">
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="preconnect" href="https://s.ytimg.com">
+
   <style>
     :root { --card:#111827; }
-    body { background:#111827; color:white; box-sizing:border-box; }
+    * { box-sizing: border-box; }
+    body { background:#111827; color:white; }
+
     .grid-container { display:grid; gap:1rem; grid-template-columns:repeat(2,1fr); }
     @media (max-width:1024px){ .grid-container{ grid-template-columns:repeat(2,1fr);} }
     @media (max-width:640px){  .grid-container{ grid-template-columns:1fr;} }
+
     .video-card{ background:#1f2937; border-radius:12px; overflow:hidden; border:1px solid #374151; }
-    .video-box{ aspect-ratio:16/9; position:relative; cursor:move; }
+    .video-box{ aspect-ratio:16/9; position:relative; }
     .player-fill{ position:absolute; inset:0; }
     .player-fill iframe{ width:100%!important; height:100%!important; display:block; }
-    .badge-live{ background:#dc2626; }
-    .tile-btn{ font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; }
-    .tile-btn:hover{ background:rgba(255,255,255,.08); }
-    .drag-over{ outline:2px dashed #60a5fa; outline-offset:-6px; }
-    .hidden { display:none!important; }
 
-    /* ===== QUALIDADE (ícone + menu) ===== */
-    .q-wrap{ position:absolute; right:.5rem; bottom:.5rem; display:flex; align-items:center; gap:.4rem; }
-    .q-btn{ display:flex; align-items:center; gap:.35rem; font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.45); backdrop-filter:blur(2px); }
+    .thumb { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; cursor:default; }
+    .thumb img{ width:100%; height:100%; object-fit:cover; filter:brightness(.92); }
+
+    .tile-btn{ font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.35); backdrop-filter:blur(2px); }
+    .tile-btn:hover{ background:rgba(255,255,255,.08); }
+    .hidden { display:none!important; }
+    .controls { z-index:15; }
+
+    .offline-overlay{
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      text-align:center; padding:1rem;
+      background:linear-gradient(180deg, rgba(17,24,39,0.20), rgba(17,24,39,0.75));
+      backdrop-filter:blur(1.5px);
+      pointer-events:none; z-index:9;
+    }
+    .offline-badge{
+      display:inline-flex; align-items:center; gap:.5rem; padding:.5rem .75rem;
+      border:1px solid rgba(255,255,255,.25); border-radius:.5rem; font-size:.9rem; color:#e5e7eb;
+    }
+
+    .live-badge{
+      position:absolute; top:.5rem; left:.5rem;
+      display:none; align-items:center; gap:.35rem;
+      padding:.25rem .5rem; font-size:.7rem; border-radius:.45rem;
+      background:#dc2626; z-index:12;
+    }
+    .live-dot{ width:.45rem; height:.45rem; border-radius:999px; background:white; animation:pulse 1.2s infinite; }
+    @keyframes pulse{ 0%{opacity:.4; transform:scale(.8)} 50%{opacity:1; transform:scale(1)} 100%{opacity:.4; transform:scale(.8)} }
+
+    .q-wrap{ position:absolute; right:.5rem; bottom:.5rem; display:flex; align-items:center; gap:.4rem; z-index:20; }
+    .q-btn{ display:flex; align-items:center; gap:.35rem; font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.45); backdrop-filter:blur(2px); cursor:pointer; }
     .q-btn:hover{ background:rgba(255,255,255,.08); }
-    .q-menu{ position:absolute; right:0; bottom:2.2rem; background:#0b1220; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.35rem; display:none; z-index:20; }
+    .q-menu{ position:absolute; right:0; bottom:2.2rem; background:#0b1220; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.35rem; display:none; z-index:30; min-width:96px; }
     .q-item{ display:flex; align-items:center; gap:.45rem; padding:.35rem .5rem; border-radius:.45rem; font-size:12px; cursor:pointer; white-space:nowrap; }
     .q-item:hover{ background:rgba(255,255,255,.08); }
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
+
+    .list-wrap{ background:#0f172a; border:1px solid #253046; border-radius:12px; overflow:hidden; }
+    .list-item{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-top:1px solid #253046; }
+    .list-item:first-child{ border-top:0; }
+    .list-item a{ color:#cbd5e1; text-decoration:none; }
+    .list-item a:hover{ color:#fff; }
+    .btn-ghost{ font-size:12px; padding:6px 10px; border:1px solid #334155; border-radius:8px; background:transparent; color:#cbd5e1; }
+    .btn-ghost:hover{ background:#1f2937; color:#fff; }
+    .btn-disabled{ opacity:.5; cursor:not-allowed; }
   </style>
 
-  <!-- YouTube API -->
   <script src="https://www.youtube.com/iframe_api"></script>
-  <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
   <script>
   (function(){
     const qs=(s,e=document)=>e.querySelector(s);
+    const qsa=(s,e=document)=>Array.from(e.querySelectorAll(s));
+    const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
-    /* ===== Login universal (apenas Editor) ===== */
+    const params=new URLSearchParams(location.search);
+    const CPA_KEY = params.get('cpa');                         // ex.: CPA6, CPA7, CPA8, CPA12
+    const MODE=(params.get('mode')||'edit').toLowerCase();     // 'edit' | 'view'
+    const isView = MODE==='view';
+
+    /* ===== Login ===== */
     const AUTH_USER='OPERACAOCPM';
     const AUTH_PASS='CAVPMDRONES';
-    const REMEMBER_MIN=240; // 4h
+    const REMEMBER_MIN=240;
 
     function auth_ok_until(){ const v=localStorage.getItem('auth_ok_until'); return v?parseInt(v,10):0; }
     function set_auth_ok(){ localStorage.setItem('auth_ok_until', String(Date.now()+REMEMBER_MIN*60*1000)); }
-    function doLogin(){
-      const u=qs('#authUser')?.value?.trim()||'', p=qs('#authPass')?.value||'', err=qs('#authErr');
-      if(u===AUTH_USER && p===AUTH_PASS){ set_auth_ok(); qs('#authOverlay').style.display='none'; return true; }
-      err?.classList.remove('hidden'); setTimeout(()=>err?.classList.add('hidden'),1500); return false;
+    function ensureAuthOrAsk(cb){
+      try{
+        if(auth_ok_until()>Date.now()) return cb(true);
+        const overlay=qs('#authOverlay'); overlay.style.display='flex';
+        const form=qs('#authForm');
+        const handler=(e)=>{ e.preventDefault();
+          const u=qs('#authUser').value.trim(), p=qs('#authPass').value;
+          if(u===AUTH_USER && p===AUTH_PASS){
+            set_auth_ok(); overlay.style.display='none';
+            form.removeEventListener('submit',handler); cb(true);
+          }else{
+            const err=qs('#authErr'); err.classList.remove('hidden');
+            setTimeout(()=>err.classList.add('hidden'),1500); cb(false);
+          }
+        };
+        form.addEventListener('submit', handler);
+      }catch(err){ console.error('Auth error', err); cb(false); }
     }
 
-    /* ===== Firebase: SUA CONFIG ===== */
+    /* ===== Firebase ===== */
     const FIREBASE = {
       apiKey: "AIzaSyDadspZB30sQOgZr7PTcSbub1ZJB80Kui4",
       authDomain: "dashboarddronepmesp.firebaseapp.com",
@@ -66,108 +125,107 @@
       appId: "1:769998411213:web:f0ecce2126f0af9b4a2084",
       measurementId: "G-4TVLS703CF"
     };
-    const DB_PATH='dashboards/main'; // caminho único
-
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
-    const dbRef=db.ref(DB_PATH);
 
-    /* ===== Estado & Params ===== */
-    const params=new URLSearchParams(location.search);
-    const MODE=(params.get('mode')||'edit').toLowerCase();
-    const isView = MODE==='view';
+    const DB_PATH = CPA_KEY ? `dashboards/${CPA_KEY}` : null;
+    const dbRef = DB_PATH ? db.ref(DB_PATH) : null;
+    const CPAS_META_PATH = 'cpas';
+    const cpasRef = db.ref(CPAS_META_PATH);
+
+    /* ===== Estado ===== */
+    const MAX_LIVES_PER_PANEL = 4;
+
     let COLS=parseInt(params.get('cols')||'2',10);
-    let VIEW_COLS_OVERRIDE=null; // seleção local do visualizador
+    let VIEW_COLS_OVERRIDE=null;
 
-    // IMPORTANTE: agora 'VIDEO_IDS' carrega PLAYLIST IDS
     let VIDEO_IDS=[], LABELS=[], LOCS=[];
+    let MAIN_ID=null;
     let YT_READY=false;
 
-    /* ===== Qualidade (padrão 144p e persistência por playlist) ===== */
+    const players = {};
+    let mainPlayer = null;
+    const activeGrid = new Set();
+    const LRU = [];
+
+    /* ===== Performance ===== */
     const DEFAULT_QUALITY='tiny'; // 144p
+    const MAX_CONCURRENT_GRID = 4;
+    const CREATE_STAGGER_MS = 250;
+    let LOW_BW_MODE = false;
+
     const Q_KEY_PREFIX='liveQ_';
     const Q_ORDER=['tiny','small','medium','large','hd720','hd1080','highres'];
     const Q_LABEL={tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',highres:'Máx.'};
 
+    const PLACEHOLDER_IMG = "ARTE.png";
+    const thumbUrl=(_id)=> PLACEHOLDER_IMG;
+
     function getSavedQ(id){ return localStorage.getItem(Q_KEY_PREFIX+id); }
     function saveQ(id,q){ localStorage.setItem(Q_KEY_PREFIX+id,q); }
 
-    function pickAvailableQuality(requested, available){
-      const avail=new Set(available||[]);
-      if (avail.has(requested)) return requested;
-      const idx=Q_ORDER.indexOf(requested);
-      if (idx>=0){
-        for(let i=idx;i>=0;i--) if (avail.has(Q_ORDER[i])) return Q_ORDER[i];
-      }
-      for(const q of Q_ORDER) if (avail.has(q)) return q;
-      return requested;
-    }
-    function enforceQuality(player, desired, cycles=8, interval=450){
-      let n=0;
-      const iv=setInterval(()=>{
-        try{
-          const avail=player.getAvailableQualityLevels?player.getAvailableQualityLevels():[];
-          const best=pickAvailableQuality(desired, avail);
-          player.setPlaybackQuality && player.setPlaybackQuality(best);
-        }catch(_){}
-        if(++n>=cycles) clearInterval(iv);
-      }, interval);
-    }
+    /* ===== ID de YouTube/Playlist — robusto ===== */
+    const YT_ID_RE = /^[a-zA-Z0-9_-]{10,}$/; // vídeo, live ou playlist (>=11 chars)
+    function idFromUrl(input){
+      if(!input) return '';
+      let u = input.trim();
 
-    /* ===== Utils ===== */
-    const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-    // Extrai PLAYLIST ID (list=) ou aceita ID cru
-    const idFromUrl=u=>{
+      // Se colar só o ID
+      if(YT_ID_RE.test(u) && !u.includes('http')) return u;
+
+      // Tenta como URL
       try{
-        const url=new URL(u);
-        const listParam=url.searchParams.get('list');
-        if(listParam) return listParam;
-        // /playlist?list=... é coberto acima; se cair aqui e tiver 'list=' no texto:
-      }catch(_){}
-      if(typeof u==='string' && u.includes('list=')) return u.split('list=')[1].split('&')[0];
-      return (u||'').trim();
-    };
+        const url = new URL(u);
+        url.hostname = url.hostname.replace(/^m\./,'').replace(/^music\./,'');
 
-    /* ===== Drag & Drop (editor) ===== */
-    let dragSrcIndex=null;
-    function attachDnD(cardEl, index){
-      if(isView) return;
-      cardEl.setAttribute('draggable','true');
-      cardEl.addEventListener('dragstart', e=>{ dragSrcIndex=index; e.dataTransfer.effectAllowed='move'; cardEl.classList.add('opacity-80'); });
-      cardEl.addEventListener('dragend',   ()=>{ cardEl.classList.remove('opacity-80'); document.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over')); });
-      cardEl.addEventListener('dragover',  e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; cardEl.classList.add('drag-over'); });
-      cardEl.addEventListener('dragleave', ()=>{ cardEl.classList.remove('drag-over'); });
-      cardEl.addEventListener('drop',      e=>{
-        e.preventDefault();
-        cardEl.classList.remove('drag-over');
-        const targetIndex=parseInt(cardEl.dataset.idx,10);
-        if(dragSrcIndex===null || dragSrcIndex===targetIndex) return;
-        const move=(arr,from,to)=>{ const x=arr.splice(from,1)[0]; arr.splice(to,0,x); };
-        move(VIDEO_IDS,dragSrcIndex,targetIndex);
-        move(LABELS,   dragSrcIndex,targetIndex);
-        move(LOCS,     dragSrcIndex,targetIndex);
-        saveRealtime(); // salva ordem
-        renderGrid();  // re-render editor
-      });
+        const list = url.searchParams.get('list');
+        if(list && YT_ID_RE.test(list)) return list;
+
+        const v = url.searchParams.get('v');
+        if(v && YT_ID_RE.test(v)) return v;
+
+        const shorts = url.pathname.match(/\/shorts\/([a-zA-Z0-9_-]{10,})/);
+        if(shorts) return shorts[1];
+
+        const live = url.pathname.match(/\/live\/([a-zA-Z0-9_-]{10,})/);
+        if(live) return live[1];
+
+        if(url.hostname.includes('youtu.be')){
+          const p = url.pathname.replace(/^\/+/,'').split('/')[0];
+          if(YT_ID_RE.test(p)) return p;
+        }
+
+        if(u.includes('watch?v=')) return u.split('watch?v=')[1].split('&')[0];
+        if(u.includes('list='))    return u.split('list=')[1].split('&')[0];
+      }catch(_e){
+        if(u.includes('watch?v=')) return u.split('watch?v=')[1].split('&')[0];
+        if(u.includes('list='))    return u.split('list=')[1].split('&')[0];
+      }
+
+      if(YT_ID_RE.test(u)) return u;
+      return '';
+    }
+    const isPlaylistId=(id)=> typeof id==='string' && (id.startsWith('PL')||id.startsWith('UU')||id.startsWith('LL')||id.length>12);
+
+    function setLiveBadge(cardEl, flag){
+      if(!cardEl) return;
+      let badge = cardEl.querySelector('[data-live-badge]');
+      if(!badge){
+        badge = document.createElement('div');
+        badge.className='live-badge';
+        badge.setAttribute('data-live-badge','');
+        badge.innerHTML = '<span class="live-dot"></span><span>AO VIVO</span>';
+        cardEl.querySelector('.video-box').appendChild(badge);
+      }
+      badge.style.display = flag ? 'inline-flex' : 'none';
     }
 
-    /* ===== YouTube ===== */
-    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
+    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; if(CPA_KEY){ renderAll(); } };
 
-    function applyGridCols(){
-      const cols = (isView && VIEW_COLS_OVERRIDE!=null) ? VIEW_COLS_OVERRIDE : COLS;
-      const grid=qs('#gridContainer');
-      if(grid) grid.style.gridTemplateColumns=`repeat(${cols}, 1fr)`;
-      const layout=qs('#layout');
-      if(layout) layout.value=String(cols);
-    }
-
-    // cria o HTML do seletor (ícone engrenagem + menu)
     function qualityControlTemplate(currentLabel){
       return `
         <div class="q-wrap">
           <button type="button" class="q-btn" data-qbtn>
-            <!-- ícone engrenagem -->
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="opacity-90">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.89 3.31.877 2.42 2.42a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.89 1.543-.877 3.31-2.42 2.42a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.89-3.31-.877-2.42-2.42A1.724 1.724 0 004.317 13.65c-1.756-.426-1.756-2.924 0-3.35A1.724 1.724 0 005.383 7.73c-.89-1.543.877-3.31 2.42-2.42.99.57 2.232.04 2.522-.993z"/>
@@ -176,334 +234,504 @@
             <span data-qlabel>${currentLabel}</span>
           </button>
           <div class="q-menu" data-qmenu>
-            ${Q_ORDER.map(q=>`
-              <div class="q-item" data-q="${q}">
-                <span class="q-dot"></span>${Q_LABEL[q]}
-              </div>
-            `).join('')}
+            ${Q_ORDER.map(q=>`<div class="q-item" data-q="${q}"><span class="q-dot"></span>${Q_LABEL[q]}</div>`).join('')}
           </div>
         </div>
       `;
     }
 
-    function renderGrid(){
-      const grid=qs('#gridContainer');
-      grid.innerHTML='';
-      applyGridCols();
-
-      if(LABELS.length<VIDEO_IDS.length){ for(let i=LABELS.length;i<VIDEO_IDS.length;i++) LABELS[i]=`Equipe ${String(i+1).padStart(2,'0')}`; }
-      if(LOCS.length<VIDEO_IDS.length){   for(let i=LOCS.length;i<VIDEO_IDS.length;i++)   LOCS[i]=''; }
-
-      if(!VIDEO_IDS.length){
-        grid.innerHTML=isView?'Aguardando configuração do operador.':'Clique em <b>Inserir Equipe</b> ou use o botão <b>Inserir Equipe</b> no topo.';
+    document.addEventListener('click', (ev)=>{
+      const rmBtn = ev.target.closest('[data-remove]');
+      if(rmBtn){
+        if(isView) return; // viewer nunca remove
+        const card = ev.target.closest('.video-card');
+        if(!card) return;
+        const id = card.getAttribute('data-vid');
+        const idx = VIDEO_IDS.indexOf(id);
+        if(idx>-1){
+          if(!confirm('Remover esta equipe?')) return;
+          VIDEO_IDS.splice(idx,1); LABELS.splice(idx,1); LOCS.splice(idx,1);
+          if(MAIN_ID===id) MAIN_ID = VIDEO_IDS[0] || null;
+          saveRealtime().catch(()=>{}); renderAll();
+        }
         return;
       }
 
-      VIDEO_IDS.forEach((id,i)=>{
-        const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
-        const card=document.createElement('div'); card.className='video-card'; card.dataset.idx=i; card.id=`card_${id}`;
+      const qBtn = ev.target.closest('[data-qbtn]');
+      if(qBtn){
+        const menu = qBtn.parentElement.querySelector('[data-qmenu]');
+        const open = menu.style.display==='block';
+        qsa('.q-menu').forEach(m=> m.style.display='none');
+        menu.style.display = open ? 'none' : 'block';
+        ev.stopPropagation();
+        return;
+      }
+
+      const qItem = ev.target.closest('.q-item');
+      if(qItem){
+        const card = ev.target.closest('.video-card');
+        const id = card.getAttribute('data-vid');
+        const idxAttr = card.getAttribute('data-idx'); // "main" ou número
+        const q  = qItem.getAttribute('data-q');
+        saveQ(id,q);
+
+        if(idxAttr==='main' && mainPlayer){
+          try{ mainPlayer.setPlaybackQuality(q); enforceQuality(mainPlayer,q); }catch(_){}
+        }else{
+          const idx = parseInt(idxAttr,10);
+          const player = players[idx];
+          try{ player && player.setPlaybackQuality && player.setPlaybackQuality(q); enforceQuality(player,q); }catch(_) {}
+        }
+
+        const lbl = card.querySelector('[data-qlabel]'); if(lbl) lbl.textContent = Q_LABEL[q]||q;
+        const menu = card.querySelector('[data-qmenu]'); if(menu) menu.style.display='none';
+        return;
+      }
+
+      if(!ev.target.closest('.q-wrap')){ qsa('.q-menu').forEach(m=> m.style.display='none'); }
+    });
+
+    function touchLRU(idx){ const pos = LRU.indexOf(idx); if(pos>=0) LRU.splice(pos,1); LRU.push(idx); }
+    function evictIfNeeded(){
+      while(activeGrid.size > MAX_CONCURRENT_GRID){
+        const victim = LRU.shift();
+        if(victim==null) break;
+        if(!activeGrid.has(victim)) continue;
+        destroyGridPlayer(victim);
+      }
+    }
+
+    function pickAvailableQuality(requested, available){
+      const avail=new Set(available||[]);
+      if (avail.has(requested)) return requested;
+      const ORDER=['highres','hd1080','hd720','large','medium','small','tiny'];
+      for(const q of ORDER) if (avail.has(q)) return q;
+      return requested;
+    }
+    function enforceQuality(player, desired, cycles=10, interval=500){
+      let n=0; const iv=setInterval(()=>{
+        try{
+          const avail=player.getAvailableQualityLevels?player.getAvailableQualityLevels():[];
+          const best=pickAvailableQuality(desired, avail);
+          player.setPlaybackQuality?.(best);
+        }catch(_){}
+        if(++n>=cycles) clearInterval(iv);
+      }, interval);
+    }
+
+    function createGridPlayer(i, id, isPl){
+      if(LOW_BW_MODE) return;
+      if(activeGrid.size >= MAX_CONCURRENT_GRID){ evictIfNeeded(); if(activeGrid.size >= MAX_CONCURRENT_GRID) return; }
+      const mountId = `yt_${i}`;
+      const savedQ = getSavedQ(id) || 'tiny';
+      const cfg = {
+        width:'100%', height:'100%',
+        playerVars:{
+          autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1,
+          origin: location.origin
+        },
+        events:{
+          onReady:e=>{
+            try{
+              const info = e.target.getVideoData ? e.target.getVideoData() : {};
+              const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
+              const isLive = (info && info.isLiveContent) || dur === 0;
+
+              const card=qs(`#card_${i}`);
+              setLiveBadge(card, !!isLive);
+
+              if(!isLive){
+                setOfflineEl(`off_${i}`, true);
+                destroyGridPlayer(i);
+                return;
+              }
+
+              e.target.mute(); e.target.playVideo();
+              const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
+              const best=pickAvailableQuality(savedQ, avail);
+              e.target.setPlaybackQuality?.(best);
+              enforceQuality(e.target, best);
+
+              const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
+              if(!getSavedQ(id)) saveQ(id, best);
+              setOfflineEl(`off_${i}`, false);
+
+              activeGrid.add(i); touchLRU(i);
+              const iframe = qs(`#${mountId} iframe`); if(iframe){ iframe.setAttribute('loading','lazy'); }
+            }catch(_){}
+          },
+          onStateChange:e=>{
+            if (typeof YT!=='undefined' && YT.PlayerState){
+              const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
+              setOfflineEl(`off_${i}`, !online);
+              if(e.data===YT.PlayerState.ENDED) setLiveBadge(qs(`#card_${i}`), false);
+            }
+            touchLRU(i);
+          }
+        }
+      };
+      if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; } else { cfg.videoId=id; }
+      players[i] = new YT.Player(mountId, cfg);
+    }
+
+    function destroyGridPlayer(i){
+      const p = players[i];
+      if(p && p.destroy){ try{ p.destroy(); }catch(_){ } }
+      players[i] = null;
+      activeGrid.delete(i);
+      const card = qs(`#card_${i}`);
+      if(card){
+        const fill  = card.querySelector('.player-fill');
+        if(fill)  fill.innerHTML = '';
+        setLiveBadge(card, false);
+      }
+    }
+    function setOfflineEl(elId, flag){ const ov = document.getElementById(elId); if(ov) ov.style.display = flag ? 'flex' : 'none'; }
+
+    function createMain(id){
+      const isPl = isPlaylistId(id);
+      const savedQ = getSavedQ(id) || 'tiny';
+      const cfg = {
+        width:'100%', height:'100%',
+        playerVars:{
+          autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1,
+          origin: location.origin
+        },
+        events:{
+          onReady:e=>{
+            try{
+              const info = e.target.getVideoData ? e.target.getVideoData() : {};
+              const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
+              const isLive = (info && info.isLiveContent) || dur === 0;
+
+              const cont=qs('#mainContainer');
+              setLiveBadge(cont, !!isLive);
+
+              if(!isLive){
+                setOfflineEl('off_main', true);
+                try{ mainPlayer && mainPlayer.destroy && mainPlayer.destroy(); }catch(_){}
+                mainPlayer = null;
+                return;
+              }
+
+              e.target.mute(); e.target.playVideo();
+
+              const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
+              const best=pickAvailableQuality(savedQ, avail);
+              e.target.setPlaybackQuality?.(best);
+              enforceQuality(e.target, best);
+              const lbl=qs('#mainContainer [data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
+              if(!getSavedQ(id)) saveQ(id, best);
+              setOfflineEl('off_main', false);
+              const iframe = qs('#yt_main iframe'); if(iframe){ iframe.setAttribute('loading','lazy'); }
+            }catch(_){}
+          },
+          onStateChange:e=>{
+            if (typeof YT!=='undefined' && YT.PlayerState){
+              const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
+              setOfflineEl('off_main', !online);
+              if(e.data===YT.PlayerState.ENDED) setLiveBadge(qs('#mainContainer'), false);
+            }
+          }
+        }
+      };
+      if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; } else { cfg.videoId=id; }
+      mainPlayer = new YT.Player('yt_main', cfg);
+    }
+
+    function renderAll(){ renderMain(); renderGrid(); updateAddButtonState(); }
+
+    function renderMain(){
+      const cont = qs('#mainContainer'); cont.innerHTML='';
+      if(!VIDEO_IDS.length){ cont.classList.add('hidden'); return; }
+      cont.classList.remove('hidden');
+
+      const id = ( (MAIN_ID && VIDEO_IDS.includes(MAIN_ID)) ? MAIN_ID : (VIDEO_IDS[0]||null) );
+      if(!id){ cont.classList.add('hidden'); return; }
+
+      const idx = VIDEO_IDS.indexOf(id);
+      const label = LABELS[idx] || `Equipe ${idx+1}`;
+      const loc   = LOCS[idx]   || '';
+      const isPl  = isPlaylistId(id);
+      const fullUrl = isPl ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}` : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+
+      const card = document.createElement('div');
+      card.className='video-card';
+      card.dataset.vid=id;
+      card.dataset.idx='main';
+      const tUrl = thumbUrl(id);
+
+      card.innerHTML = `
+        <div class="video-box">
+          <div class="thumb" data-thumb><img src="${tUrl}" alt="thumbnail institucional" loading="lazy"></div>
+          <div class="live-badge" data-live-badge style="display:none;"><span class="live-dot"></span><span>AO VIVO</span></div>
+          <div id="yt_main" class="player-fill"></div>
+          <div class="absolute top-2 right-2 flex gap-2 controls">
+            <button class="tile-btn" onclick="window.open('${fullUrl}','_blank')">Tela cheia</button>
+            ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
+          </div>
+          <div class="offline-overlay" id="off_main"><div class="offline-badge"><span>aguardando sinal</span></div></div>
+          ${qualityControlTemplate('144p')}
+        </div>
+        <div class="px-3 pt-2 pb-3 bg-gray-800/70">
+          <h3 class="font-semibold text-base">${esc(label)}</h3>
+          <p class="text-gray-400 text-sm">${esc(loc)}</p>
+        </div>
+      `;
+      cont.appendChild(card);
+      if(YT_READY) createMain(id);
+    }
+
+    function renderGrid(){
+      const grid=qs('#gridContainer'); grid.innerHTML=''; applyGridCols();
+      Object.keys(players).forEach(k=> destroyGridPlayer(Number(k)));
+      activeGrid.clear(); LRU.length=0;
+
+      if(!VIDEO_IDS.length){
+        grid.innerHTML=isView?'Aguardando configuração do operador.':'Clique em <b>Inserir Equipe</b> no topo.';
+        return;
+      }
+      const anchorId = ( (MAIN_ID&&VIDEO_IDS.includes(MAIN_ID))?MAIN_ID:(VIDEO_IDS[0]||null) );
+      const idsForGrid = VIDEO_IDS.filter(id => id !== anchorId);
+      if(LABELS.length<VIDEO_IDS.length){ for(let i=LABELS.length;i<VIDEO_IDS.length;i++) LABELS[i]=`Equipe ${String(i+1).padStart(2,'0')}`; }
+      if(LOCS.length<VIDEO_IDS.length){   for(let i=LOCS.length;i<VIDEO_IDS.length;i++)   LOCS[i]=''; }
+
+      idsForGrid.forEach((id,i)=>{
+        const idxOriginal = VIDEO_IDS.indexOf(id);
+        const isPl=isPlaylistId(id);
+        const fullUrl = isPl ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}` : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+        const card=document.createElement('div');
+        card.className='video-card'; card.dataset.idx=String(i); card.dataset.vid=id; card.id=`card_${i}`;
+        const tUrl = thumbUrl(id);
         card.innerHTML=
           `<div class="video-box">
+             <div class="thumb" data-thumb><img src="${tUrl}" alt="thumbnail institucional" loading="lazy"></div>
+             <div class="live-badge" data-live-badge style="display:none;"><span class="live-dot"></span><span>AO VIVO</span></div>
              <div id="yt_${i}" class="player-fill"></div>
-
-             <div class="absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
-               <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO
+             <div class="absolute top-2 right-2 flex gap-2 controls">
+               <button class="tile-btn" onclick="window.open('${fullUrl}','_blank')">Tela cheia</button>
+               ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
              </div>
-
-             <div class="absolute top-2 right-2 flex gap-2">
-               <button class="tile-btn" onclick="window.open('https://www.youtube.com/playlist?list=${encodeURIComponent(id)}','_blank')">Tela cheia</button>
-               ${isView ? '' : `<button class="tile-btn" onclick="(function(){
-                   if(!confirm('Remover esta equipe?')) return;
-                   const idx=${i};
-                   VIDEO_IDS.splice(idx,1);
-                   LABELS.splice(idx,1);
-                   LOCS.splice(idx,1);
-                   saveRealtime();
-                   renderGrid();
-                 })()">Remover</button>`}
-             </div>
-
-             <!-- Qualidade: canto inferior direito -->
-             ${qualityControlTemplate(Q_LABEL[savedQ])}
+             <div class="offline-overlay" id="off_${i}"><div class="offline-badge"><span>aguardando sinal</span></div></div>
+             ${qualityControlTemplate('144p')}
            </div>
-
-           <div class="px-2 pt-1 pb-0 bg-gray-800/70">
-             <h3 class="font-medium text-sm">${esc(LABELS[i]||'Equipe '+(i+1))}</h3>
-             <p class="text-gray-400 text-[11px]">${esc(LOCS[i]||'')}</p>
+           <div class="px-2 pt-1 pb-2 bg-gray-800/70">
+             <h3 class="font-medium text-sm">${esc(LABELS[idxOriginal]||'Equipe '+(idxOriginal+1))}</h3>
+             <p class="text-gray-400 text-[11px]">${esc(LOCS[idxOriginal]||'')}</p>
            </div>`;
-
         grid.appendChild(card);
-        attachDnD(card,i);
-
-        // Instancia player YouTube (AGORA VIA PLAYLIST)
-        if(YT_READY){
-          const player = new YT.Player(`yt_${i}`,{
-            width:'100%', height:'100%',
-            playerVars:{
-              listType:'playlist', list:id,
-              autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1
-            },
-            events:{
-              onReady:e=>{
-                try{ e.target.mute(); e.target.playVideo(); }catch(_){}
-                const desired=getSavedQ(id) || DEFAULT_QUALITY;
-                const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-                const best=pickAvailableQuality(desired, avail);
-                e.target.setPlaybackQuality && e.target.setPlaybackQuality(best);
-                enforceQuality(e.target, best);
-                // Sincroniza label no botão
-                const qLabel=card.querySelector('[data-qlabel]');
-                if(qLabel) qLabel.textContent=Q_LABEL[best]||best;
-                if(!getSavedQ(id)) saveQ(id, best);
-              },
-              onStateChange:e=>{
-                if (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING){
-                  const desired=getSavedQ(id) || DEFAULT_QUALITY;
-                  const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-                  const best=pickAvailableQuality(desired, avail);
-                  try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
-                }
-              }
-            }
-          });
-
-          // Comportamento do menu de qualidade
-          const qBtn = card.querySelector('[data-qbtn]');
-          const qMenu= card.querySelector('[data-qmenu]');
-          const qLabel=card.querySelector('[data-qlabel]');
-
-          qBtn?.addEventListener('click', (ev)=>{
-            ev.stopPropagation();
-            qMenu.style.display = (qMenu.style.display==='block' ? 'none' : 'block');
-          });
-
-          qMenu?.querySelectorAll('.q-item').forEach(item=>{
-            item.addEventListener('click', ()=>{
-              const q=item.getAttribute('data-q');
-              saveQ(id,q);
-              qLabel.textContent=Q_LABEL[q]||q;
-              try{
-                player.setPlaybackQuality && player.setPlaybackQuality(q);
-                enforceQuality(player, q);
-              }catch(_){}
-              qMenu.style.display='none';
-            });
-          });
-
-          // Fechar quando clicar fora
-          document.addEventListener('click', (ev)=>{
-            if (!qMenu.contains(ev.target) && !qBtn.contains(ev.target)){
-              qMenu.style.display='none';
-            }
-          });
-        }
       });
+
+      const io = new IntersectionObserver((entries)=>{
+        entries.forEach(entry=>{
+          const card = entry.target; const idx = Number(card.dataset.idx); const id  = card.dataset.vid; const isPl= isPlaylistId(id);
+          if(entry.isIntersecting){
+            setTimeout(()=>{
+              if(LOW_BW_MODE) return;
+              if(players[idx]){ activeGrid.add(idx); touchLRU(idx); return; }
+              createGridPlayer(idx, id, isPl);
+              setTimeout(()=>evictIfNeeded(), CREATE_STAGGER_MS);
+            }, CREATE_STAGGER_MS * (idx%4));
+          }else{ if(players[idx]) destroyGridPlayer(idx); }
+        });
+      }, { rootMargin:'100px 0px', threshold:0.1 });
+      document.querySelectorAll('.video-card[data-idx]').forEach(card=> io.observe(card));
     }
 
-    /* ===== Realtime ===== */
+    const OFFLINE_POLL_MS = 10000;
+    setInterval(()=>{
+      if(mainPlayer && typeof YT!=='undefined' && YT.PlayerState){
+        try{
+          const st = mainPlayer.getPlayerState ? mainPlayer.getPlayerState() : null;
+          if(st!=null){
+            const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING);
+            setOfflineEl('off_main', !on);
+            if(!on) setLiveBadge(qs('#mainContainer'), false);
+          }
+        }catch(_){}
+      }
+      Object.keys(players).forEach(k=>{
+        const i = Number(k);
+        const p = players[i];
+        if(!p || typeof YT==='undefined' || !YT.PlayerState) return;
+        try{
+          const st = p.getPlayerState ? p.getPlayerState() : null;
+          const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING);
+          setOfflineEl(`off_${i}`, !on);
+          if(!on) setLiveBadge(qs(`#card_${i}`), false);
+        }catch(_){}
+      });
+    }, OFFLINE_POLL_MS);
+
+    /* ===== Persistência ===== */
     function saveRealtime(){
-      dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() });
+      if(!dbRef) return Promise.resolve();
+      return dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, main: MAIN_ID || null, ts:Date.now() });
     }
     function subscribeRealtime(){
+      if(!dbRef) return;
       dbRef.on('value', snap=>{
-        const j=snap.val(); if(!j) return;
-        const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
-        COLS = parseInt(j.cols||COLS||2,10);
-
-        const sameSet = newIds.length===VIDEO_IDS.length &&
-                        [...newIds].sort().join(',') === [...VIDEO_IDS].sort().join(',');
-
-        if(sameSet && YT_READY){
-          // reordena DOM sem recriar players
-          const grid=qs('#gridContainer');
-          newIds.forEach(id=>{
-            const el=document.getElementById(`card_${id}`);
-            if(el) grid.appendChild(el);
-          });
-          VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-
-          // atualiza textos
-          newIds.forEach((id,idx)=>{
-            const card=document.getElementById(`card_${id}`);
-            if(card){
-              const title=card.querySelector('h3'); const loc=card.querySelector('p.text-gray-400');
-              if(title) title.textContent=newLabels[idx]||`Equipe ${idx+1}`;
-              if(loc)   loc.textContent=newLocs[idx]||'';
-            }
-          });
-
-          // aplica colunas (respeitando override do viewer)
-          applyGridCols();
-        } else {
-          VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-          renderGrid();
-        }
+        const j=snap.val(); // pode ser null no início
+        const newIds=(j&&j.ids)||[], newLabels=(j&&j.labels)||[], newLocs=(j&&j.locs)||[];
+        COLS = parseInt((j&&j.cols)||COLS||2,10);
+        MAIN_ID = (j&&j.main) || MAIN_ID || newIds[0] || null;
+        VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
+        renderAll();
       });
     }
 
-    /* ===== UI Init ===== */
+    /* ===== Header & Landing ===== */
+    function subscribeCpaTitle(){
+      if(!CPA_KEY) return;
+      const node = cpasRef.child(CPA_KEY);
+      node.on('value', snap=>{
+        const t = (snap.val() && snap.val().title) ? snap.val().title : 'Painel';
+        qs('#hdrSubtitle').textContent = `Painel — ${t}`;
+        document.title = `Dashboard Drones — ${t}`;
+      });
+    }
+
+    // Landing: apenas CPA6, CPA7, CPA8, CPA12
+    function renderLanding(){
+      qs('#panelCPA')?.classList.add('hidden');
+      qs('#editorControls')?.classList.add('hidden');
+      const land = qs('#landing'); land.classList.remove('hidden');
+      qs('#hdrSubtitle').textContent = 'Selecione um Painel';
+
+      const wrap = qs('#landingList'); wrap.innerHTML = '';
+      const KEYS = ['CPA6','CPA7','CPA8','CPA12'];
+
+      cpasRef.on('value', snap=>{
+        const data = snap.val() || {};
+        wrap.innerHTML = '';
+        KEYS.forEach(key=>{
+          const title = (data[key] && data[key].title) ? data[key].title : 'Painel';
+          const li = document.createElement('div');
+          li.className='list-item';
+
+          const left = document.createElement('div');
+          left.innerHTML = `<a href="${location.pathname}?cpa=${encodeURIComponent(key)}&mode=edit&cols=2" class="text-base">${esc(title)}</a>`;
+
+          const right = document.createElement('div');
+          const editBtn = document.createElement('button');
+          editBtn.className='btn-ghost';
+          editBtn.textContent='✎ Renomear';
+          editBtn.addEventListener('click', (ev)=>{
+            ev.preventDefault(); ev.stopPropagation();
+            ensureAuthOrAsk(async ok=>{
+              if(!ok) return;
+              const nv = prompt('Novo nome do painel:', title);
+              if(nv===null) return;
+              const t = nv.trim(); if(!t) return;
+              try{ await cpasRef.child(key).set({ title: t }); alert('Nome atualizado.'); }
+              catch(err){ alert('Erro ao salvar: '+(err?.message||err)); }
+            });
+          });
+          right.appendChild(editBtn);
+
+          li.appendChild(left);
+          li.appendChild(right);
+          wrap.appendChild(li);
+        });
+      });
+    }
+
+    function applyGridCols(){
+      const cols = (isView && VIEW_COLS_OVERRIDE!=null) ? VIEW_COLS_OVERRIDE : COLS;
+      const grid=qs('#gridContainer');
+      if(grid) grid.style.gridTemplateColumns=`repeat(${cols}, 1fr)`;
+      const layout=qs('#layout'); if(layout) layout.value=String(cols);
+    }
+
+    // Habilita/Desabilita o botão Inserir conforme o limite
+    function updateAddButtonState(){
+      const btn = qs('#btnConfig');
+      if(!btn) return;
+      const disabled = isView || (VIDEO_IDS.length >= MAX_LIVES_PER_PANEL);
+      btn.disabled = disabled;
+      btn.classList.toggle('btn-disabled', disabled);
+      btn.textContent = disabled ? (isView ? 'Inserir Equipe' : 'Limite atingido (4)') : 'Inserir Equipe';
+    }
+
+    /* ===== Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
-      // Mostrar/ocultar botões conforme modo
-      qs('#btnShare')?.classList.toggle('hidden', isView);
+      // Sem CPA -> Landing
+      if(!CPA_KEY){ renderLanding(); return; }
+
+      // Com CPA
+      qs('#panelCPA')?.classList.remove('hidden');
+
+      // Controles do topo: em VIEW esconder edição
+      const ctrl = qs('#editorControls');
+      ctrl?.classList.remove('hidden');
       qs('#btnConfig')?.classList.toggle('hidden', isView);
       qs('#btnClearAll')?.classList.toggle('hidden', isView);
 
-      // login só no editor
-      if(!isView){
-        if(auth_ok_until()<=Date.now()){
-          qs('#authOverlay').style.display='flex';
-          qs('#authForm')?.addEventListener('submit', e=>{ e.preventDefault(); doLogin(); });
-        }
-      } else {
-        qs('#authOverlay').style.display='none';
-      }
-
-      // Cabeçalho
-      qs('#btnFullscreen')?.addEventListener('click',()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
-
-      // Layout select:
+      // Layout: viewer local; editor salva
       qs('#layout')?.addEventListener('change', ()=>{
         const val = parseInt(qs('#layout').value,10)||2;
-        if(isView){
-          // apenas local (override), sem salvar no Firebase
-          VIEW_COLS_OVERRIDE = val;
-          applyGridCols();
-        } else {
-          // editor: salva no Firebase
-          COLS = val;
-          saveRealtime();
-          applyGridCols();
-        }
+        VIEW_COLS_OVERRIDE = val;
+        applyGridCols();
+        if(!isView){ COLS = val; saveRealtime().catch(()=>{}); }
       });
 
-      // Inserir equipe (editor)
-      qs('#btnAddTeam')?.addEventListener('click', e=>{
+      qs('#btnFullscreen')?.addEventListener('click',()=>{
+        if(!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+      });
+
+      // Inserir Equipe: abre modal (se não bater limite)
+      qs('#btnConfig')?.addEventListener('click', ()=>{
+        if(isView) return;
+        if(VIDEO_IDS.length >= MAX_LIVES_PER_PANEL){
+          alert('Limite de 4 lives por painel atingido.');
+          return;
+        }
+        qs('#configModal').classList.remove('hidden');
+      });
+
+      // Adicionar equipe
+      qs('#btnAddTeam')?.addEventListener('click', (e)=>{
         e.preventDefault();
+        if(isView) return;
+
+        // Limite duro de 4 lives por painel
+        if(VIDEO_IDS.length >= MAX_LIVES_PER_PANEL){
+          alert('Limite de 4 lives por painel atingido.');
+          return;
+        }
+
         const name=qs('#teamName').value.trim();
         const loc=qs('#teamLocation').value.trim();
         const url=qs('#youtubeUrl').value.trim();
         if(!name||!url){ alert('Preencha Nome e URL'); return; }
-        const id=idFromUrl(url); // agora extrai PLAYLIST ID
+        const id=idFromUrl(url);
+
+        if(!id){
+          alert('URL/ID inválido do YouTube/Playlist. Cole uma URL do tipo:\n• https://youtu.be/ID\n• https://www.youtube.com/watch?v=ID\n• https://www.youtube.com/shorts/ID\n• https://www.youtube.com/live/ID\n• https://www.youtube.com/playlist?list=LISTID');
+          return;
+        }
+
+        if(VIDEO_IDS.includes(id)){
+          alert('Esta equipe (ID) já está no painel.');
+          return;
+        }
+
+        // Atualiza localmente para você ver na hora
         VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
-        // Qualidade padrão (144p) para a nova PLAYLIST
-        if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
-        saveRealtime();
-        renderGrid();
-        qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
-      });
+        if(!MAIN_ID) MAIN_ID = id;
+        renderAll(); // já atualiza estado do botão aqui também
 
-      // Share link (editor)
-      qs('#btnShare')?.addEventListener('click', ()=>{
-        const base=location.origin+location.pathname;
-        const url=new URL(base);
-        url.searchParams.set('mode','view');
-        url.searchParams.set('cols', String(COLS));
-        url.searchParams.set('sync','rt');
-        navigator.clipboard.writeText(url.toString()).then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
-      });
-
-      // Limpar tudo (editor)
-      qs('#btnClearAll')?.addEventListener('click', ()=>{
-        if(!confirm('Apagar TODAS as equipes do dashboard?')) return;
-        VIDEO_IDS=[]; LABELS=[]; LOCS=[];
-        saveRealtime();
-        renderGrid();
-      });
-
-      // Start RT e primeira render
-      subscribeRealtime();
-    });
-
-    // (mantemos UMA definição – antes havia duas)
-    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
-  })();
-  </script>
-</head>
-<body class="min-h-screen">
-
-  <!-- Overlay de Login (só editor) -->
-  <div id="authOverlay" class="fixed inset-0 z-[1000] hidden items-center justify-center bg-black/70">
-    <div class="bg-gray-800 text-white w-full max-w-sm rounded-xl shadow-xl p-6">
-      <h2 class="text-lg font-semibold mb-4">Acesso restrito</h2>
-      <form id="authForm" class="space-y-3">
-        <div>
-          <label class="block text-sm mb-1">Usuário</label>
-          <input id="authUser" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="usuário">
-        </div>
-        <div>
-          <label class="block text-sm mb-1">Senha</label>
-          <input id="authPass" type="password" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="senha">
-        </div>
-        <button class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Entrar</button>
-        <p id="authErr" class="text-red-400 text-sm hidden">Usuário ou senha incorretos.</p>
-      </form>
-    </div>
-  </div>
-
-  <!-- Header -->
-  <header class="p-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-      <div class="flex items-center gap-3">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png" alt="PMESP" class="w-10 h-10 object-contain rounded bg-white/5 p-1">
-        <div>
-          <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-          <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <label class="text-xs text-gray-400">Layout</label>
-        <select id="layout" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
-          <option value="2">2 colunas</option>
-          <option value="3">3 colunas</option>
-          <option value="4">4 colunas</option>
-        </select>
-        <button id="btnFullscreen" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Tela Cheia</button>
-        <button id="btnShare" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Gerar Link</button>
-        <button id="btnConfig" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm"
-                onclick="document.getElementById('configModal').classList.remove('hidden')">
-          Inserir Equipe
-        </button>
-        <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">
-          Limpar
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Grid -->
-  <main class="p-4 max-w-7xl mx-auto">
-    <div id="gridContainer" class="grid-container"></div>
-  </main>
-
-  <!-- Modal Inserir -->
-  <div id="configModal" class="fixed inset-0 bg-black/60 hidden z-50">
-    <div class="flex items-center justify-center min-h-screen p-4">
-      <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-        <h3 class="text-lg font-semibold mb-4 text-center">Inserir Equipe</h3>
-        <form id="teamForm" class="space-y-4">
-          <div>
-            <label class="block text-sm mb-1">Nome da Equipe</label>
-            <input id="teamName" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Ex.: Equipe Alfa">
-          </div>
-          <div>
-            <label class="block text-sm mb-1">Endereço da Operação</label>
-            <input id="teamLocation" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Rua / Bairro / Ponto de referência">
-          </div>
-          <div>
-            <label class="block text-sm mb-1">URL da Playlist do YouTube</label>
-            <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://www.youtube.com/playlist?list=PLxxxxxxx">
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button id="btnAddTeam" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
-            <button type="button" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
-              onclick="document.getElementById('configModal').classList.add('hidden'); document.getElementById('teamForm').reset();">
-              Cancelar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-</body>
-</html>
+        // Tenta gravar (pede auth aqui)
+        ensureAuthOrAsk(ok=>{
+          if(!ok){
+            alert('A equipe foi adicionada apenas localmente (sem salvar no Firebase).');
+            return;
+          }
+          if(!dbRef){
+            alert('CPA inválido na URL. Abra via página inicial.');
+            return;
+          }
+          saveRealtime()
+            .then(()=>{
+              qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
