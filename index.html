@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v15.3 - landing em lista + rename CPA + barra editor no CPA -->
+  <!-- build: v15.4 - fix rename CPA + inserir equipe auth + robustez -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Preconnect para reduzir handshake do YT -->
@@ -104,14 +104,16 @@
     function auth_ok_until(){ const v=localStorage.getItem('auth_ok_until'); return v?parseInt(v,10):0; }
     function set_auth_ok(){ localStorage.setItem('auth_ok_until', String(Date.now()+REMEMBER_MIN*60*1000)); }
     function ensureAuthOrAsk(cb){
-      if(auth_ok_until()>Date.now()) return cb(true);
-      const overlay=qs('#authOverlay'); overlay.style.display='flex';
-      const form=qs('#authForm');
-      const handler=(e)=>{ e.preventDefault(); const u=qs('#authUser').value.trim(), p=qs('#authPass').value;
-        if(u===AUTH_USER && p===AUTH_PASS){ set_auth_ok(); overlay.style.display='none'; form.removeEventListener('submit',handler); cb(true); }
-        else { const err=qs('#authErr'); err.classList.remove('hidden'); setTimeout(()=>err.classList.add('hidden'),1500); cb(false); }
-      };
-      form.addEventListener('submit', handler);
+      try{
+        if(auth_ok_until()>Date.now()) return cb(true);
+        const overlay=qs('#authOverlay'); overlay.style.display='flex';
+        const form=qs('#authForm');
+        const handler=(e)=>{ e.preventDefault(); const u=qs('#authUser').value.trim(), p=qs('#authPass').value;
+          if(u===AUTH_USER && p===AUTH_PASS){ set_auth_ok(); overlay.style.display='none'; form.removeEventListener('submit',handler); cb(true); }
+          else { const err=qs('#authErr'); err.classList.remove('hidden'); setTimeout(()=>err.classList.add('hidden'),1500); cb(false); }
+        };
+        form.addEventListener('submit', handler);
+      }catch(err){ console.error('Auth error', err); cb(false); }
     }
 
     /* ===== Firebase ===== */
@@ -562,12 +564,13 @@
     /* ===== Realtime (por CPA) ===== */
     function saveRealtime(){
       if(!dbRef) return;
-      dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, main: MAIN_ID || null, ts:Date.now() });
+      dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, main: MAIN_ID || null, ts:Date.now() })
+        .catch(err=>{ console.error('Erro ao salvar RTDB:', err); alert('Falha ao salvar no Firebase. Verifique conexão/permissões.'); });
     }
     function subscribeRealtime(){
       if(!dbRef) return;
       dbRef.on('value', snap=>{
-        const j=snap.val(); if(!j) return;
+        const j=snap.val(); if(!j) { renderAll(); return; }
         const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
         COLS = parseInt(j.cols||COLS||2,10);
         MAIN_ID = j.main || MAIN_ID || newIds[0] || null;
@@ -579,8 +582,8 @@
     /* ===== Header nome CPA (segunda página) ===== */
     function subscribeCpaTitle(){
       if(!CPA_KEY) return;
-      cfas = cpasRef.child(CPA_KEY);
-      cfas.on('value', snap=>{
+      const node = cpasRef.child(CPA_KEY);
+      node.on('value', snap=>{
         const t = (snap.val() && snap.val().title) ? snap.val().title : CPA_KEY;
         qs('#hdrSubtitle').textContent = `Painel — ${t}`;
         document.title = `Dashboard Drones — ${t}`;
@@ -603,13 +606,14 @@
         ensureAuthOrAsk(async ok=>{
           if(!ok) return;
           const nv = prompt(`Novo nome para ${key}:`, currentTitle);
-          if(!nv) return;
+          if(nv===null) return; // cancelou
           const title = nv.trim();
           if(!title) return;
           try{
             await db.ref(`${CPAS_META_PATH}/${key}`).set({ title });
             alert('Nome atualizado.');
           }catch(err){
+            console.error('Erro ao renomear CPA:', err);
             alert('Erro ao salvar o nome: ' + (err?.message || err));
           }
         });
@@ -674,12 +678,6 @@
         if(!isView){ COLS = val; saveRealtime(); }
       });
 
-      // Login (só para ações de edição)
-      if(auth_ok_until()<=Date.now()){
-        // Apenas abre quando for necessário (ex.: Inserir Equipe)
-        // Aqui mantemos overlay fechado
-      }
-
       // Botões topo
       qs('#btnFullscreen')?.addEventListener('click',()=>{
         if(!document.fullscreenElement) document.documentElement.requestFullscreen();
@@ -690,18 +688,23 @@
         ensureAuthOrAsk(ok=>{ if(ok) qs('#configModal').classList.remove('hidden'); });
       });
 
-      qs('#btnAddTeam')?.addEventListener('click', e=>{
+      // >>> FIX: Inserir equipe exige auth e não faz submit padrão
+      qs('#btnAddTeam')?.addEventListener('click', (e)=>{
         e.preventDefault();
-        const name=qs('#teamName').value.trim();
-        const loc=qs('#teamLocation').value.trim();
-        const url=qs('#youtubeUrl').value.trim();
-        if(!name||!url){ alert('Preencha Nome e URL'); return; }
-        const id=idFromUrl(url);
-        VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
-        if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
-        if(!MAIN_ID) MAIN_ID = id;
-        saveRealtime(); renderAll();
-        qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
+        ensureAuthOrAsk(ok=>{
+          if(!ok) return;
+          const name=qs('#teamName').value.trim();
+          const loc=qs('#teamLocation').value.trim();
+          const url=qs('#youtubeUrl').value.trim();
+          if(!name||!url){ alert('Preencha Nome e URL'); return; }
+          const id=idFromUrl(url);
+          if(!id){ alert('URL inválida do YouTube/Playlist.'); return; }
+          VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
+          if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
+          if(!MAIN_ID) MAIN_ID = id;
+          saveRealtime(); renderAll();
+          qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
+        });
       });
 
       qs('#btnShare')?.addEventListener('click', ()=>{
@@ -774,7 +777,7 @@
         <div class="flex items-center gap-3">
           <div>
             <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-            <p id="hdrSubtitle" class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v15.3</p>
+            <p id="hdrSubtitle" class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v15.4</p>
           </div>
           <img src="qualidade%20melhor%20-Photoroom.png" alt="Comando de Aviação da PMESP"
                class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
@@ -831,12 +834,12 @@
             <label class="block text-sm mb-1">Endereço da Operação</label>
             <input id="teamLocation" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Av. Olavo Fontoura, 1078">
           </div>
-          <div>
+            <div>
             <label class="block text-sm mb-1">URL da Playlist/Vídeo</label>
             <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://www.youtube.com/playlist?list=PLxxx ou https://www.youtube.com/watch?v=abc123">
           </div>
           <div class="flex gap-3 pt-2">
-            <button id="btnAddTeam" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
+            <button id="btnAddTeam" type="button" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
             <button type="button" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
               onclick="document.getElementById('configModal').classList.add('hidden'); document.getElementById('teamForm').reset();">
               Cancelar
