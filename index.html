@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v15.8 - CPAs 6/7/8/12 + limite 4 lives por painel + botão Inserir desabilita a partir de 4 -->
+  <!-- build: v15.8 - hotfix origin YT + limite 4 por CPA + blindagens de null/erros -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Preconnect -->
@@ -70,9 +70,9 @@
     .list-item a:hover{ color:#fff; }
     .btn-ghost{ font-size:12px; padding:6px 10px; border:1px solid #334155; border-radius:8px; background:transparent; color:#cbd5e1; }
     .btn-ghost:hover{ background:#1f2937; color:#fff; }
-    .btn-disabled{ opacity:.5; cursor:not-allowed; }
   </style>
 
+  <!-- YouTube e Firebase -->
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -82,9 +82,11 @@
     const qs=(s,e=document)=>e.querySelector(s);
     const qsa=(s,e=document)=>Array.from(e.querySelectorAll(s));
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+    const safeOrigin = (location.origin || (location.protocol + '//' + location.host));
 
+    /* ===== Params ===== */
     const params=new URLSearchParams(location.search);
-    const CPA_KEY = params.get('cpa');                         // ex.: CPA6, CPA7, CPA8, CPA12
+    const CPA_KEY = params.get('cpa');                         // CPA6, CPA7, CPA8, CPA12
     const MODE=(params.get('mode')||'edit').toLowerCase();     // 'edit' | 'view'
     const isView = MODE==='view';
 
@@ -98,44 +100,45 @@
     function ensureAuthOrAsk(cb){
       try{
         if(auth_ok_until()>Date.now()) return cb(true);
-        const overlay=qs('#authOverlay'); overlay.style.display='flex';
-        const form=qs('#authForm');
+        const overlay=qs('#authOverlay'); if(!overlay) return cb(false);
+        overlay.style.display='flex';
+        const form=qs('#authForm'); if(!form) return cb(false);
         const handler=(e)=>{ e.preventDefault();
           const u=qs('#authUser').value.trim(), p=qs('#authPass').value;
           if(u===AUTH_USER && p===AUTH_PASS){
             set_auth_ok(); overlay.style.display='none';
             form.removeEventListener('submit',handler); cb(true);
           }else{
-            const err=qs('#authErr'); err.classList.remove('hidden');
-            setTimeout(()=>err.classList.add('hidden'),1500); cb(false);
+            const err=qs('#authErr'); if(err){ err.classList.remove('hidden'); setTimeout(()=>err.classList.add('hidden'),1500); }
+            cb(false);
           }
         };
-        form.addEventListener('submit', handler);
+        form.addEventListener('submit', handler, { once:true });
       }catch(err){ console.error('Auth error', err); cb(false); }
     }
 
     /* ===== Firebase ===== */
-    const FIREBASE = {
-      apiKey: "AIzaSyDadspZB30sQOgZr7PTcSbub1ZJB80Kui4",
-      authDomain: "dashboarddronepmesp.firebaseapp.com",
-      databaseURL: "https://dashboarddronepmesp-default-rtdb.firebaseio.com",
-      projectId: "dashboarddronepmesp",
-      storageBucket: "dashboarddronepmesp.firebasestorage.app",
-      messagingSenderId: "769998411213",
-      appId: "1:769998411213:web:f0ecce2126f0af9b4a2084",
-      measurementId: "G-4TVLS703CF"
-    };
-    firebase.initializeApp(FIREBASE);
-    const db=firebase.database();
-
-    const DB_PATH = CPA_KEY ? `dashboards/${CPA_KEY}` : null;
-    const dbRef = DB_PATH ? db.ref(DB_PATH) : null;
-    const CPAS_META_PATH = 'cpas';
-    const cpasRef = db.ref(CPAS_META_PATH);
+    let db=null, dbRef=null, cpasRef=null;
+    try{
+      const FIREBASE = {
+        apiKey: "AIzaSyDadspZB30sQOgZr7PTcSbub1ZJB80Kui4",
+        authDomain: "dashboarddronepmesp.firebaseapp.com",
+        databaseURL: "https://dashboarddronepmesp-default-rtdb.firebaseio.com",
+        projectId: "dashboarddronepmesp",
+        storageBucket: "dashboarddronepmesp.firebasestorage.app",
+        messagingSenderId: "769998411213",
+        appId: "1:769998411213:web:f0ecce2126f0af9b4a2084",
+        measurementId: "G-4TVLS703CF"
+      };
+      firebase.initializeApp(FIREBASE);
+      db=firebase.database();
+      dbRef = CPA_KEY ? db.ref(`dashboards/${CPA_KEY}`) : null;
+      cpasRef = db.ref('cpas');
+    }catch(err){
+      console.error('Firebase init error:', err);
+    }
 
     /* ===== Estado ===== */
-    const MAX_LIVES_PER_PANEL = 4;
-
     let COLS=parseInt(params.get('cols')||'2',10);
     let VIEW_COLS_OVERRIDE=null;
 
@@ -161,52 +164,38 @@
     const PLACEHOLDER_IMG = "ARTE.png";
     const thumbUrl=(_id)=> PLACEHOLDER_IMG;
 
-    function getSavedQ(id){ return localStorage.getItem(Q_KEY_PREFIX+id); }
-    function saveQ(id,q){ localStorage.setItem(Q_KEY_PREFIX+id,q); }
+    function getSavedQ(id){ try{ return localStorage.getItem(Q_KEY_PREFIX+id); }catch(_){ return null; } }
+    function saveQ(id,q){ try{ localStorage.setItem(Q_KEY_PREFIX+id,q); }catch(_){ } }
 
-    /* ===== ID de YouTube/Playlist — robusto ===== */
-    const YT_ID_RE = /^[a-zA-Z0-9_-]{10,}$/; // vídeo, live ou playlist (>=11 chars)
+    /* ===== YT ID robusto ===== */
+    const YT_ID_RE = /^[a-zA-Z0-9_-]{10,}$/;
     function idFromUrl(input){
       if(!input) return '';
       let u = input.trim();
-
-      // Se colar só o ID
       if(YT_ID_RE.test(u) && !u.includes('http')) return u;
-
-      // Tenta como URL
       try{
         const url = new URL(u);
         url.hostname = url.hostname.replace(/^m\./,'').replace(/^music\./,'');
-
-        const list = url.searchParams.get('list');
-        if(list && YT_ID_RE.test(list)) return list;
-
-        const v = url.searchParams.get('v');
-        if(v && YT_ID_RE.test(v)) return v;
-
-        const shorts = url.pathname.match(/\/shorts\/([a-zA-Z0-9_-]{10,})/);
-        if(shorts) return shorts[1];
-
-        const live = url.pathname.match(/\/live\/([a-zA-Z0-9_-]{10,})/);
-        if(live) return live[1];
-
+        const list = url.searchParams.get('list'); if(list && YT_ID_RE.test(list)) return list;
+        const v = url.searchParams.get('v'); if(v && YT_ID_RE.test(v)) return v;
+        const shorts = url.pathname.match(/\/shorts\/([a-zA-Z0-9_-]{10,})/); if(shorts) return shorts[1];
+        const live = url.pathname.match(/\/live\/([a-zA-Z0-9_-]{10,})/); if(live) return live[1];
         if(url.hostname.includes('youtu.be')){
           const p = url.pathname.replace(/^\/+/,'').split('/')[0];
           if(YT_ID_RE.test(p)) return p;
         }
-
         if(u.includes('watch?v=')) return u.split('watch?v=')[1].split('&')[0];
         if(u.includes('list='))    return u.split('list=')[1].split('&')[0];
-      }catch(_e){
+      }catch(_){
         if(u.includes('watch?v=')) return u.split('watch?v=')[1].split('&')[0];
         if(u.includes('list='))    return u.split('list=')[1].split('&')[0];
       }
-
       if(YT_ID_RE.test(u)) return u;
       return '';
     }
     const isPlaylistId=(id)=> typeof id==='string' && (id.startsWith('PL')||id.startsWith('UU')||id.startsWith('LL')||id.length>12);
 
+    /* ===== Live badge ===== */
     function setLiveBadge(cardEl, flag){
       if(!cardEl) return;
       let badge = cardEl.querySelector('[data-live-badge]');
@@ -215,12 +204,14 @@
         badge.className='live-badge';
         badge.setAttribute('data-live-badge','');
         badge.innerHTML = '<span class="live-dot"></span><span>AO VIVO</span>';
-        cardEl.querySelector('.video-box').appendChild(badge);
+        const vb = cardEl.querySelector('.video-box');
+        if(vb) vb.appendChild(badge);
       }
       badge.style.display = flag ? 'inline-flex' : 'none';
     }
 
-    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; if(CPA_KEY){ renderAll(); } };
+    /* ===== YT ready ===== */
+    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; if(CPA_KEY){ safeRenderAll(); } };
 
     function qualityControlTemplate(currentLabel){
       return `
@@ -240,26 +231,28 @@
       `;
     }
 
+    /* ===== Global clicks (com blindagem) ===== */
     document.addEventListener('click', (ev)=>{
-      const rmBtn = ev.target.closest('[data-remove]');
+      const rmBtn = ev.target.closest?.('[data-remove]');
       if(rmBtn){
-        if(isView) return; // viewer nunca remove
-        const card = ev.target.closest('.video-card');
-        if(!card) return;
+        if(isView) return;
+        const card = ev.target.closest('.video-card'); if(!card) return;
         const id = card.getAttribute('data-vid');
         const idx = VIDEO_IDS.indexOf(id);
         if(idx>-1){
           if(!confirm('Remover esta equipe?')) return;
           VIDEO_IDS.splice(idx,1); LABELS.splice(idx,1); LOCS.splice(idx,1);
           if(MAIN_ID===id) MAIN_ID = VIDEO_IDS[0] || null;
-          saveRealtime().catch(()=>{}); renderAll();
+          saveRealtime().catch(()=>{}); safeRenderAll();
         }
         return;
       }
 
-      const qBtn = ev.target.closest('[data-qbtn]');
+      const qBtn = ev.target.closest?.('[data-qbtn]');
       if(qBtn){
-        const menu = qBtn.parentElement.querySelector('[data-qmenu]');
+        const wrap = qBtn.parentElement;
+        const menu = wrap?.querySelector('[data-qmenu]');
+        if(!menu) return;
         const open = menu.style.display==='block';
         qsa('.q-menu').forEach(m=> m.style.display='none');
         menu.style.display = open ? 'none' : 'block';
@@ -267,28 +260,28 @@
         return;
       }
 
-      const qItem = ev.target.closest('.q-item');
+      const qItem = ev.target.closest?.('.q-item');
       if(qItem){
-        const card = ev.target.closest('.video-card');
+        const card = ev.target.closest('.video-card'); if(!card) return;
         const id = card.getAttribute('data-vid');
-        const idxAttr = card.getAttribute('data-idx'); // "main" ou número
+        const idxAttr = card.getAttribute('data-idx');
         const q  = qItem.getAttribute('data-q');
         saveQ(id,q);
-
-        if(idxAttr==='main' && mainPlayer){
-          try{ mainPlayer.setPlaybackQuality(q); enforceQuality(mainPlayer,q); }catch(_){}
-        }else{
-          const idx = parseInt(idxAttr,10);
-          const player = players[idx];
-          try{ player && player.setPlaybackQuality && player.setPlaybackQuality(q); enforceQuality(player,q); }catch(_) {}
-        }
-
+        try{
+          if(idxAttr==='main' && mainPlayer){
+            mainPlayer.setPlaybackQuality?.(q); enforceQuality(mainPlayer,q);
+          }else{
+            const idx = parseInt(idxAttr,10);
+            const player = players[idx];
+            player?.setPlaybackQuality?.(q); enforceQuality(player,q);
+          }
+        }catch(_){}
         const lbl = card.querySelector('[data-qlabel]'); if(lbl) lbl.textContent = Q_LABEL[q]||q;
         const menu = card.querySelector('[data-qmenu]'); if(menu) menu.style.display='none';
         return;
       }
 
-      if(!ev.target.closest('.q-wrap')){ qsa('.q-menu').forEach(m=> m.style.display='none'); }
+      if(!ev.target.closest?.('.q-wrap')){ qsa('.q-menu').forEach(m=> m.style.display='none'); }
     });
 
     function touchLRU(idx){ const pos = LRU.indexOf(idx); if(pos>=0) LRU.splice(pos,1); LRU.push(idx); }
@@ -326,57 +319,47 @@
       const savedQ = getSavedQ(id) || 'tiny';
       const cfg = {
         width:'100%', height:'100%',
-        playerVars:{
-          autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1,
-          origin: location.origin
-        },
+        playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1, origin: safeOrigin },
         events:{
           onReady:e=>{
             try{
               const info = e.target.getVideoData ? e.target.getVideoData() : {};
               const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
               const isLive = (info && info.isLiveContent) || dur === 0;
-
               const card=qs(`#card_${i}`);
               setLiveBadge(card, !!isLive);
-
-              if(!isLive){
-                setOfflineEl(`off_${i}`, true);
-                destroyGridPlayer(i);
-                return;
-              }
-
+              if(!isLive){ setOfflineEl(`off_${i}`, true); destroyGridPlayer(i); return; }
               e.target.mute(); e.target.playVideo();
               const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
               const best=pickAvailableQuality(savedQ, avail);
               e.target.setPlaybackQuality?.(best);
               enforceQuality(e.target, best);
-
               const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[best]||best;
               if(!getSavedQ(id)) saveQ(id, best);
               setOfflineEl(`off_${i}`, false);
-
               activeGrid.add(i); touchLRU(i);
               const iframe = qs(`#${mountId} iframe`); if(iframe){ iframe.setAttribute('loading','lazy'); }
-            }catch(_){}
+            }catch(err){ console.error(err); }
           },
           onStateChange:e=>{
-            if (typeof YT!=='undefined' && YT.PlayerState){
-              const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
-              setOfflineEl(`off_${i}`, !online);
-              if(e.data===YT.PlayerState.ENDED) setLiveBadge(qs(`#card_${i}`), false);
-            }
-            touchLRU(i);
+            try{
+              if (typeof YT!=='undefined' && YT.PlayerState){
+                const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
+                setOfflineEl(`off_${i}`, !online);
+                if(e.data===YT.PlayerState.ENDED) setLiveBadge(qs(`#card_${i}`), false);
+              }
+              touchLRU(i);
+            }catch(err){ console.error(err); }
           }
         }
       };
       if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; } else { cfg.videoId=id; }
-      players[i] = new YT.Player(mountId, cfg);
+      try{ players[i] = new YT.Player(mountId, cfg); }catch(err){ console.error(err); }
     }
 
     function destroyGridPlayer(i){
       const p = players[i];
-      if(p && p.destroy){ try{ p.destroy(); }catch(_){ } }
+      try{ p && p.destroy && p.destroy(); }catch(_){}
       players[i] = null;
       activeGrid.delete(i);
       const card = qs(`#card_${i}`);
@@ -393,29 +376,21 @@
       const savedQ = getSavedQ(id) || 'tiny';
       const cfg = {
         width:'100%', height:'100%',
-        playerVars:{
-          autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1,
-          origin: location.origin
-        },
+        playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1, origin: safeOrigin },
         events:{
           onReady:e=>{
             try{
               const info = e.target.getVideoData ? e.target.getVideoData() : {};
               const dur  = typeof e.target.getDuration === 'function' ? e.target.getDuration() : null;
               const isLive = (info && info.isLiveContent) || dur === 0;
-
               const cont=qs('#mainContainer');
               setLiveBadge(cont, !!isLive);
-
               if(!isLive){
                 setOfflineEl('off_main', true);
                 try{ mainPlayer && mainPlayer.destroy && mainPlayer.destroy(); }catch(_){}
-                mainPlayer = null;
-                return;
+                mainPlayer = null; return;
               }
-
               e.target.mute(); e.target.playVideo();
-
               const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
               const best=pickAvailableQuality(savedQ, avail);
               e.target.setPlaybackQuality?.(best);
@@ -424,25 +399,29 @@
               if(!getSavedQ(id)) saveQ(id, best);
               setOfflineEl('off_main', false);
               const iframe = qs('#yt_main iframe'); if(iframe){ iframe.setAttribute('loading','lazy'); }
-            }catch(_){}
+            }catch(err){ console.error(err); }
           },
           onStateChange:e=>{
-            if (typeof YT!=='undefined' && YT.PlayerState){
-              const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
-              setOfflineEl('off_main', !online);
-              if(e.data===YT.PlayerState.ENDED) setLiveBadge(qs('#mainContainer'), false);
-            }
+            try{
+              if (typeof YT!=='undefined' && YT.PlayerState){
+                const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
+                setOfflineEl('off_main', !online);
+                if(e.data===YT.PlayerState.ENDED) setLiveBadge(qs('#mainContainer'), false);
+              }
+            }catch(err){ console.error(err); }
           }
         }
       };
       if(isPl){ cfg.playerVars.listType='playlist'; cfg.playerVars.list=id; } else { cfg.videoId=id; }
-      mainPlayer = new YT.Player('yt_main', cfg);
+      try{ mainPlayer = new YT.Player('yt_main', cfg); }catch(err){ console.error(err); }
     }
 
-    function renderAll(){ renderMain(); renderGrid(); updateAddButtonState(); }
+    function renderAll(){ renderMain(); renderGrid(); }
+    function safeRenderAll(){ try{ renderAll(); }catch(err){ console.error(err); } }
 
     function renderMain(){
-      const cont = qs('#mainContainer'); cont.innerHTML='';
+      const cont = qs('#mainContainer'); if(!cont) return;
+      cont.innerHTML='';
       if(!VIDEO_IDS.length){ cont.classList.add('hidden'); return; }
       cont.classList.remove('hidden');
 
@@ -483,7 +462,8 @@
     }
 
     function renderGrid(){
-      const grid=qs('#gridContainer'); grid.innerHTML=''; applyGridCols();
+      const grid=qs('#gridContainer'); if(!grid) return;
+      grid.innerHTML=''; applyGridCols();
       Object.keys(players).forEach(k=> destroyGridPlayer(Number(k)));
       activeGrid.clear(); LRU.length=0;
 
@@ -540,27 +520,25 @@
 
     const OFFLINE_POLL_MS = 10000;
     setInterval(()=>{
-      if(mainPlayer && typeof YT!=='undefined' && YT.PlayerState){
-        try{
+      try{
+        if(mainPlayer && typeof YT!=='undefined' && YT.PlayerState){
           const st = mainPlayer.getPlayerState ? mainPlayer.getPlayerState() : null;
           if(st!=null){
             const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING);
             setOfflineEl('off_main', !on);
             if(!on) setLiveBadge(qs('#mainContainer'), false);
           }
-        }catch(_){}
-      }
-      Object.keys(players).forEach(k=>{
-        const i = Number(k);
-        const p = players[i];
-        if(!p || typeof YT==='undefined' || !YT.PlayerState) return;
-        try{
+        }
+        Object.keys(players).forEach(k=>{
+          const i = Number(k);
+          const p = players[i];
+          if(!p || typeof YT==='undefined' || !YT.PlayerState) return;
           const st = p.getPlayerState ? p.getPlayerState() : null;
           const on = (st===YT.PlayerState.PLAYING || st===YT.PlayerState.BUFFERING);
           setOfflineEl(`off_${i}`, !on);
           if(!on) setLiveBadge(qs(`#card_${i}`), false);
-        }catch(_){}
-      });
+        });
+      }catch(err){ console.error(err); }
     }, OFFLINE_POLL_MS);
 
     /* ===== Persistência ===== */
@@ -571,51 +549,54 @@
     function subscribeRealtime(){
       if(!dbRef) return;
       dbRef.on('value', snap=>{
-        const j=snap.val(); // pode ser null no início
-        const newIds=(j&&j.ids)||[], newLabels=(j&&j.labels)||[], newLocs=(j&&j.locs)||[];
-        COLS = parseInt((j&&j.cols)||COLS||2,10);
-        MAIN_ID = (j&&j.main) || MAIN_ID || newIds[0] || null;
-        VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-        renderAll();
-      });
+        try{
+          const j=snap.val(); if(!j) { safeRenderAll(); return; }
+          const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
+          COLS = parseInt(j.cols||COLS||2,10);
+          MAIN_ID = j.main || MAIN_ID || newIds[0] || null;
+          VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
+          safeRenderAll();
+        }catch(err){ console.error(err); }
+      }, err=>console.error('RTDB subscribe error:', err));
     }
 
     /* ===== Header & Landing ===== */
     function subscribeCpaTitle(){
-      if(!CPA_KEY) return;
-      const node = cpasRef.child(CPA_KEY);
-      node.on('value', snap=>{
-        const t = (snap.val() && snap.val().title) ? snap.val().title : 'Painel';
-        qs('#hdrSubtitle').textContent = `Painel — ${t}`;
-        document.title = `Dashboard Drones — ${t}`;
-      });
+      if(!CPA_KEY || !cpasRef) return;
+      try{
+        const node = cpasRef.child(CPA_KEY);
+        node.on('value', snap=>{
+          const t = (snap.val() && snap.val().title) ? snap.val().title : 'Painel';
+          const el=qs('#hdrSubtitle'); if(el) el.textContent = `Painel — ${t}`;
+          document.title = `Dashboard Drones — ${t}`;
+        });
+      }catch(err){ console.error(err); }
     }
 
-    // Landing: apenas CPA6, CPA7, CPA8, CPA12
     function renderLanding(){
       qs('#panelCPA')?.classList.add('hidden');
       qs('#editorControls')?.classList.add('hidden');
-      const land = qs('#landing'); land.classList.remove('hidden');
-      qs('#hdrSubtitle').textContent = 'Selecione um Painel';
+      const land = qs('#landing'); land?.classList.remove('hidden');
+      const hdr = qs('#hdrSubtitle'); if(hdr) hdr.textContent = 'Selecione um Painel';
 
-      const wrap = qs('#landingList'); wrap.innerHTML = '';
-      const KEYS = ['CPA6','CPA7','CPA8','CPA12'];
+      const wrap = qs('#landingList'); if(!wrap) return;
+      wrap.innerHTML = '';
+
+      if(!cpasRef) return;
 
       cpasRef.on('value', snap=>{
         const data = snap.val() || {};
         wrap.innerHTML = '';
-        KEYS.forEach(key=>{
+        ['CPA6','CPA7','CPA8','CPA12'].forEach(key=>{
           const title = (data[key] && data[key].title) ? data[key].title : 'Painel';
-          const li = document.createElement('div');
-          li.className='list-item';
+          const li = document.createElement('div'); li.className='list-item';
 
           const left = document.createElement('div');
           left.innerHTML = `<a href="${location.pathname}?cpa=${encodeURIComponent(key)}&mode=edit&cols=2" class="text-base">${esc(title)}</a>`;
 
           const right = document.createElement('div');
           const editBtn = document.createElement('button');
-          editBtn.className='btn-ghost';
-          editBtn.textContent='✎ Renomear';
+          editBtn.className='btn-ghost'; editBtn.textContent='✎ Renomear';
           editBtn.addEventListener('click', (ev)=>{
             ev.preventDefault(); ev.stopPropagation();
             ensureAuthOrAsk(async ok=>{
@@ -633,7 +614,7 @@
           li.appendChild(right);
           wrap.appendChild(li);
         });
-      });
+      }, err=>console.error('Landing cpasRef error:', err));
     }
 
     function applyGridCols(){
@@ -643,95 +624,217 @@
       const layout=qs('#layout'); if(layout) layout.value=String(cols);
     }
 
-    // Habilita/Desabilita o botão Inserir conforme o limite
-    function updateAddButtonState(){
-      const btn = qs('#btnConfig');
-      if(!btn) return;
-      const disabled = isView || (VIDEO_IDS.length >= MAX_LIVES_PER_PANEL);
-      btn.disabled = disabled;
-      btn.classList.toggle('btn-disabled', disabled);
-      btn.textContent = disabled ? (isView ? 'Inserir Equipe' : 'Limite atingido (4)') : 'Inserir Equipe';
-    }
-
     /* ===== Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
-      // Sem CPA -> Landing
-      if(!CPA_KEY){ renderLanding(); return; }
+      try{
+        if(!CPA_KEY){ renderLanding(); return; }
 
-      // Com CPA
-      qs('#panelCPA')?.classList.remove('hidden');
+        qs('#panelCPA')?.classList.remove('hidden');
 
-      // Controles do topo: em VIEW esconder edição
-      const ctrl = qs('#editorControls');
-      ctrl?.classList.remove('hidden');
-      qs('#btnConfig')?.classList.toggle('hidden', isView);
-      qs('#btnClearAll')?.classList.toggle('hidden', isView);
+        const ctrl = qs('#editorControls');
+        ctrl?.classList.remove('hidden');
+        qs('#btnConfig')?.classList.toggle('hidden', isView);
+        qs('#btnClearAll')?.classList.toggle('hidden', isView);
 
-      // Layout: viewer local; editor salva
-      qs('#layout')?.addEventListener('change', ()=>{
-        const val = parseInt(qs('#layout').value,10)||2;
-        VIEW_COLS_OVERRIDE = val;
-        applyGridCols();
-        if(!isView){ COLS = val; saveRealtime().catch(()=>{}); }
-      });
+        qs('#layout')?.addEventListener('change', ()=>{
+          const val = parseInt(qs('#layout').value,10)||2;
+          VIEW_COLS_OVERRIDE = val;
+          applyGridCols();
+          if(!isView){ COLS = val; saveRealtime().catch(()=>{}); }
+        });
 
-      qs('#btnFullscreen')?.addEventListener('click',()=>{
-        if(!document.fullscreenElement) document.documentElement.requestFullscreen();
-        else document.exitFullscreen();
-      });
+        qs('#btnFullscreen')?.addEventListener('click',()=>{
+          if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+          else document.exitFullscreen?.();
+        });
 
-      // Inserir Equipe: abre modal (se não bater limite)
-      qs('#btnConfig')?.addEventListener('click', ()=>{
-        if(isView) return;
-        if(VIDEO_IDS.length >= MAX_LIVES_PER_PANEL){
-          alert('Limite de 4 lives por painel atingido.');
-          return;
-        }
-        qs('#configModal').classList.remove('hidden');
-      });
+        // Inserir Equipe
+        qs('#btnConfig')?.addEventListener('click', ()=>{
+          if(isView) return;
+          qs('#configModal')?.classList.remove('hidden');
+        });
 
-      // Adicionar equipe
-      qs('#btnAddTeam')?.addEventListener('click', (e)=>{
-        e.preventDefault();
-        if(isView) return;
+        // Adicionar equipe (com limite 4 por painel)
+        qs('#btnAddTeam')?.addEventListener('click', (e)=>{
+          e.preventDefault();
+          if(isView) return;
 
-        // Limite duro de 4 lives por painel
-        if(VIDEO_IDS.length >= MAX_LIVES_PER_PANEL){
-          alert('Limite de 4 lives por painel atingido.');
-          return;
-        }
+          const name=qs('#teamName')?.value.trim();
+          const loc=qs('#teamLocation')?.value.trim();
+          const url=qs('#youtubeUrl')?.value.trim();
+          if(!name||!url){ alert('Preencha Nome e URL'); return; }
+          if(VIDEO_IDS.length >= 4){ alert('Limite de 4 lives por painel atingido.'); return; }
 
-        const name=qs('#teamName').value.trim();
-        const loc=qs('#teamLocation').value.trim();
-        const url=qs('#youtubeUrl').value.trim();
-        if(!name||!url){ alert('Preencha Nome e URL'); return; }
-        const id=idFromUrl(url);
-
-        if(!id){
-          alert('URL/ID inválido do YouTube/Playlist. Cole uma URL do tipo:\n• https://youtu.be/ID\n• https://www.youtube.com/watch?v=ID\n• https://www.youtube.com/shorts/ID\n• https://www.youtube.com/live/ID\n• https://www.youtube.com/playlist?list=LISTID');
-          return;
-        }
-
-        if(VIDEO_IDS.includes(id)){
-          alert('Esta equipe (ID) já está no painel.');
-          return;
-        }
-
-        // Atualiza localmente para você ver na hora
-        VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
-        if(!MAIN_ID) MAIN_ID = id;
-        renderAll(); // já atualiza estado do botão aqui também
-
-        // Tenta gravar (pede auth aqui)
-        ensureAuthOrAsk(ok=>{
-          if(!ok){
-            alert('A equipe foi adicionada apenas localmente (sem salvar no Firebase).');
+          const id=idFromUrl(url);
+          if(!id){
+            alert('URL/ID inválido do YouTube/Playlist.');
             return;
           }
-          if(!dbRef){
-            alert('CPA inválido na URL. Abra via página inicial.');
-            return;
-          }
-          saveRealtime()
-            .then(()=>{
-              qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
+          if(VIDEO_IDS.includes(id)){ alert('Esta equipe (ID) já está no painel.'); return; }
+
+          VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc||'');
+          if(!MAIN_ID) MAIN_ID = id;
+          safeRenderAll();
+
+          ensureAuthOrAsk(ok=>{
+            if(!ok){ alert('Adicionado localmente (sem salvar no Firebase).'); return; }
+            if(!dbRef){ alert('CPA inválido na URL. Abra via página inicial.'); return; }
+            saveRealtime()
+              .then(()=>{
+                qs('#configModal')?.classList.add('hidden');
+                qs('#teamForm')?.reset();
+              })
+              .catch(err=>{
+                console.error(err);
+                alert('Falha ao salvar no Firebase. A visualização local está ok, mas não ficou persistido.');
+              });
+          });
+        });
+
+        qs('#btnShare')?.addEventListener('click', ()=>{
+          const base=location.origin+location.pathname;
+          const url=new URL(base);
+          url.searchParams.set('mode','view');
+          url.searchParams.set('cols', String(COLS));
+          if(CPA_KEY) url.searchParams.set('cpa', CPA_KEY);
+          navigator.clipboard.writeText(url.toString()).then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
+        });
+
+        qs('#btnLowBW')?.addEventListener('click', ()=>{
+          LOW_BW_MODE = !LOW_BW_MODE;
+          const b=qs('#btnLowBW');
+          b?.classList.toggle('bg-green-600', LOW_BW_MODE);
+          b?.classList.toggle('bg-gray-700', !LOW_BW_MODE);
+          if(b) b.textContent = LOW_BW_MODE ? 'Modo Baixa Largura: ON' : 'Modo Baixa Largura: OFF';
+          if(LOW_BW_MODE){ Object.keys(players).forEach(k=> destroyGridPlayer(Number(k))); } else { renderGrid(); }
+        });
+
+        qs('#btnClearAll')?.addEventListener('click', ()=>{
+          if(isView) return;
+          ensureAuthOrAsk(ok=>{
+            if(!ok) return;
+            if(!confirm('Apagar TODAS as equipes deste painel?')) return;
+            VIDEO_IDS=[]; LABELS=[]; LOCS=[]; MAIN_ID=null;
+            saveRealtime().catch(()=>{}); safeRenderAll();
+          });
+        });
+
+        document.addEventListener('click', (ev)=>{
+          if(ev.target.id==='configModal') { qs('#configModal')?.classList.add('hidden'); }
+        });
+
+        subscribeRealtime();
+        subscribeCpaTitle();
+      }catch(err){
+        console.error('INIT error:', err);
+      }
+    });
+  })();
+  </script>
+</head>
+<body class="min-h-screen">
+
+  <!-- Overlay de Login -->
+  <div id="authOverlay" class="fixed inset-0 z-[1000] hidden items-center justify-center bg-black/70">
+    <div class="bg-gray-800 text-white w-full max-w-sm rounded-xl shadow-xl p-6">
+      <h2 class="text-lg font-semibold mb-4">Acesso restrito</h2>
+      <form id="authForm" class="space-y-3">
+        <div>
+          <label class="block text-sm mb-1">Usuário</label>
+          <input id="authUser" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="usuário" autocomplete="username">
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Senha</label>
+          <input id="authPass" type="password" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="senha" autocomplete="current-password">
+        </div>
+        <button class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Entrar</button>
+        <p id="authErr" class="text-red-400 text-sm hidden">Usuário ou senha incorretos.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="p-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <div class="flex items-center gap-3">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png"
+             alt="PMESP"
+             class="w-10 h-10 object-contain rounded bg-white/5 p-1">
+        <div class="flex items-center gap-3">
+          <div>
+            <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
+            <p id="hdrSubtitle" class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v15.8</p>
+          </div>
+          <img src="qualidade%20melhor%20-Photoroom.png" alt="Comando de Aviação da PMESP"
+               class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
+        </div>
+      </div>
+
+      <div id="editorControls" class="flex items-center gap-2 hidden">
+        <label class="text-xs text-gray-400">Layout</label>
+        <select id="layout" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
+          <option value="2">2 colunas</option>
+          <option value="3">3 colunas</option>
+          <option value="4">4 colunas</option>
+        </select>
+        <button id="btnFullscreen" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Tela Cheia</button>
+        <button id="btnShare" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Gerar Link</button>
+        <button id="btnConfig" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Inserir Equipe</button>
+        <button id="btnLowBW" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm" title="Pausa/destrói players do GRID para economizar banda/CPU.">Modo Baixa Largura: OFF</button>
+        <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Limpar</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- LANDING -->
+  <section id="landing" class="max-w-7xl mx-auto p-4 hidden">
+    <div class="mb-3">
+      <h2 class="text-xl font-semibold">Selecione um Painel</h2>
+      <p class="text-slate-300 text-sm">Clique para abrir o painel. Use ✎ para renomear.</p>
+    </div>
+    <div class="list-wrap" id="landingList"></div>
+  </section>
+
+  <!-- PAINEL -->
+  <div id="panelCPA" class="hidden">
+    <section class="max-w-7xl mx-auto p-4">
+      <div id="mainContainer" class="video-card hidden"></div>
+    </section>
+    <main class="p-4 max-w-7xl mx-auto">
+      <div id="gridContainer" class="grid-container"></div>
+    </main>
+  </div>
+
+  <!-- Modal Inserir -->
+  <div id="configModal" class="fixed inset-0 bg-black/60 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+      <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold mb-4 text-center">Inserir Equipe</h3>
+        <form id="teamForm" class="space-y-4">
+          <div>
+            <label class="block text-sm mb-1">Nome da Equipe</label>
+            <input id="teamName" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Ex.: Equipe Alfa">
+          </div>
+          <div>
+            <label class="block text-sm mb-1">Endereço da Operação (opcional)</label>
+            <input id="teamLocation" type="text" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Av. Olavo Fontoura, 1078">
+          </div>
+          <div>
+            <label class="block text-sm mb-1">URL da Playlist/Vídeo</label>
+            <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://youtu.be/ID • https://www.youtube.com/watch?v=ID • /shorts/ID • /live/ID • playlist?list=LISTID">
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button id="btnAddTeam" type="button" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
+            <button type="button" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
+              onclick="document.getElementById('configModal').classList.add('hidden'); document.getElementById('teamForm').reset();">
+              Cancelar
+            </button>
+          </div>
+        </form>
+        <p class="mt-3 text-xs text-slate-400 text-center">Salva em <code>dashboards/CPA*</code> no Firebase Realtime Database.</p>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
