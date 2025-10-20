@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hub de Visualizadores • Programa de Policiamento com Drones</title>
+  <!-- layout igual ao dashboard, porém sem Firebase/YouTube -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --card:#111827; }
+    body { background:#111827; color:white; box-sizing:border-box; }
+    .grid-container { display:grid; gap:1rem; grid-template-columns:repeat(2,1fr); }
+    @media (max-width:1024px){ .grid-container{ grid-template-columns:repeat(2,1fr);} }
+    @media (max-width:640px){  .grid-container{ grid-template-columns:1fr;} }
+    .tile{ background:#1f2937; border-radius:12px; overflow:hidden; border:1px solid #374151; position:relative; }
+    .tile-media{ aspect-ratio:16/9; position:relative; background:#0b1220; display:flex; align-items:center; justify-content:center; }
+    .tile-media img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .tile-badge{ position:absolute; top:.5rem; left:.5rem; background:#111827d9; border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:.2rem .45rem; font-size:10px; }
+    .tile-footer{ padding:.5rem .65rem .6rem; background:#0f172a; border-top:1px solid #374151; }
+    .tile-title{ font-weight:600; font-size:.95rem; }
+    .tile-sub{ font-size:.7rem; color:#9ca3af; }
+    .tile-hover{ position:absolute; inset:0; background:linear-gradient(180deg,transparent,rgba(0,0,0,.55)); opacity:0; transition:opacity .18s ease; display:flex; align-items:end; justify-content:end; padding:.55rem; }
+    .tile:hover .tile-hover{ opacity:1; }
+    .tile-btn{ font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.25); border-radius:8px; background:rgba(0,0,0,.45); }
+    .tile-btn:hover{ background:rgba(255,255,255,.08); }
+  </style>
+  <script>
+    // controles simples de layout e tela cheia (sem RTDB)
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const layoutSel = document.getElementById('layout');
+      const grid = document.getElementById('gridContainer');
+
+      function applyCols(c){ grid.style.gridTemplateColumns = `repeat(${c}, 1fr)`; }
+      layoutSel.addEventListener('change', ()=> applyCols(parseInt(layoutSel.value,10) || 2));
+      applyCols(parseInt(layoutSel.value,10) || 2);
+
+      document.getElementById('btnFullscreen')?.addEventListener('click', ()=>{
+        if(!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+      });
+    });
+  </script>
+</head>
+<body class="min-h-screen">
+
+  <!-- Header parecido com o dashboard -->
+  <header class="p-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <div class="flex items-center gap-3">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png" alt="PMESP" class="w-10 h-10 object-contain rounded bg-white/5 p-1">
+        <div>
+          <h1 class="text-lg font-bold">Hub de Visualizadores • Programa de Policiamento com Drones</h1>
+          <p class="text-gray-400 text-xs">Atalhos para painéis em tempo real</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-gray-400">Layout</label>
+        <select id="layout" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
+          <option value="2" selected>2 colunas</option>
+          <option value="3">3 colunas</option>
+          <option value="4">4 colunas</option>
+        </select>
+        <button id="btnFullscreen" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Tela Cheia</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Grid de 5 cards -->
+  <main class="p-4 max-w-7xl mx-auto">
+    <div id="gridContainer" class="grid-container">
+
+      <!-- OP1 -->
+      <a class="tile group" href="https://pmesp-drones.github.io/Dronedashboard2/op1.html?mode=view&cols=2&cpa=OP1" target="_blank" rel="noopener">
+        <div class="tile-media">
+          <!-- imagem simples; substitua por uma thumbnail se quiser -->
+          <img src="https://dummyimage.com/1280x720/0b1220/ffffff&text=OP1" alt="OP1">
+          <span class="tile-badge">OP1</span>
+          <div class="tile-hover"><span class="tile-btn">Abrir</span></div>
+        </div>
+        <div class="tile-footer">
+          <div class="tile-title">Visualizador OP1</div>
+          <div class="tile-sub">cols=2 • cpa=OP1</div>
+        </div>
+      </a>
+
+      <!-- OP2 -->
+      <a class="tile group" href="https://pmesp-drones.github.io/Dronedashboard2/op2.html?mode=view&cols=2&cpa=OP2" target="_blank" rel="noopener">
+        <div class="tile-media">
+          <img src="https://dummyimage.com/1280x720/0b1220/ffffff&text=OP2" alt="OP2">
+          <span class="tile-badge">OP2</span>
+          <div class="tile-hover"><span class="tile-btn">Abrir</span></div>
+        </div>
+        <div class="tile-footer">
+          <div class="tile-title">Visualizador OP2</div>
+          <div class="tile-sub">cols=2 • cpa=OP2</div>
+        </div>
+      </a>
+
+      <!-- OP3 -->
+      <a class="tile group" href="https://pmesp-drones.github.io/Dronedashboard2/op3.html?mode=view&cols=2&cpa=OP3" target="_blank" rel="noopener">
+        <div class="tile-media">
+          <img src="https://dummyimage.com/1280x720/0b1220/ffffff&text=OP3" alt="OP3">
+          <span class="tile-badge">OP3</span>
+          <div class="tile-hover"><span class="tile-btn">Abrir</span></div>
+        </div>
+        <div class="tile-footer">
+          <div class="tile-title">Visualizador OP3</div>
+          <div class="tile-sub">cols=2 • cpa=OP3</div>
+        </div>
+      </a>
+
+      <!-- OP4 -->
+      <a class="tile group" href="https://pmesp-drones.github.io/Dronedashboard2/op4.html?mode=view&cols=2&cpa=OP4" target="_blank" rel="noopener">
+        <div class="tile-media">
+          <img src="https://dummyimage.com/1280x720/0b1220/ffffff&text=OP4" alt="OP4">
+          <span class="tile-badge">OP4</span>
+          <div class="tile-hover"><span class="tile-btn">Abrir</span></div>
+        </div>
+        <div class="tile-footer">
+          <div class="tile-title">Visualizador OP4</div>
+          <div class="tile-sub">cols=2 • cpa=OP4</div>
+        </div>
+      </a>
+
+      <!-- DEFAULT / Geral -->
+      <a class="tile group" href="https://pmesp-drones.github.io/Dronedashboard2/?mode=view&cols=4&cpa=DEFAULT" target="_blank" rel="noopener">
+        <div class="tile-media">
+          <img src="https://dummyimage.com/1280x720/0b1220/ffffff&text=GERAL" alt="Geral">
+          <span class="tile-badge">Geral</span>
+          <div class="tile-hover"><span class="tile-btn">Abrir</span></div>
+        </div>
+        <div class="tile-footer">
+          <div class="tile-title">Visualizador Geral (DEFAULT)</div>
+          <div class="tile-sub">cols=4 • cpa=DEFAULT</div>
+        </div>
+      </a>
+
+    </div>
+  </main>
+
+</body>
+</html>
