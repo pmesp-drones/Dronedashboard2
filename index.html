@@ -42,12 +42,11 @@
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
     /* ===== Params / CPA ===== */
-    const params = new URLSearchParams(location.search);
-    const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
-    const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
-    const CPA_KEY = params.get('cpa') || CPA_FALLBACK;             // CPA6/CPA7/CPA8/CPA12
-    const MODE = (params.get('mode') || 'edit').toLowerCase();     // 'edit' | 'view'
-    const isView = MODE === 'view';
+const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
+const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
+// Sempre resolve para algo e padroniza (ex.: "CPA6" ou "DEFAULT")
+const CPA_KEY = String((params.get('cpa') || CPA_FALLBACK || 'DEFAULT')).toUpperCase();
+
 
     /* ===== Login (só Editor) ===== */
     const AUTH_USER='OPERACAOCPM';
@@ -370,14 +369,16 @@
       });
 
       // Share link (inclui o CPA correto)
-      qs('#btnShare')?.addEventListener('click', ()=>{
-        const base=location.origin+location.pathname;
-        const url=new URL(base);
-        url.searchParams.set('mode','view');
-        url.searchParams.set('cols', String(COLS));
-        if(CPA_KEY) url.searchParams.set('cpa', CPA_KEY);
-        navigator.clipboard.writeText(url.toString()).then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
-      });
+qs('#btnShare')?.addEventListener('click', ()=>{
+  const base = location.origin + location.pathname;
+  const url  = new URL(base);
+  url.searchParams.set('mode','view');
+  url.searchParams.set('cols', String(COLS));
+  // SEMPRE levar o CPA atual no link (mesmo que seja DEFAULT)
+  url.searchParams.set('cpa', CPA_KEY);
+  navigator.clipboard.writeText(url.toString())
+    .then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
+});
 
       // Limpar tudo
       qs('#btnClearAll')?.addEventListener('click', ()=>{
