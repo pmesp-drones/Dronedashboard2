@@ -349,14 +349,14 @@
         }
       });
 
-      // Inserir equipe (limite 14 por painel)
+      // Inserir equipe (limite 20 por painel)
       qs('#btnAddTeam')?.addEventListener('click', e=>{
         e.preventDefault();
         const name=qs('#teamName').value.trim();
         const loc=qs('#teamLocation').value.trim();
         const url=qs('#youtubeUrl').value.trim();
         if(!name||!url){ alert('Preencha Nome e URL'); return; }
-        if(VIDEO_IDS.length>=14){ alert('Limite de 14 lives por painel atingido.'); return; }
+        if(VIDEO_IDS.length>=14){ alert('Limite de 20 lives por painel atingido.'); return; }
 
         const id=idFromUrl(url);
         if(!id){ alert('URL/ID inválido do YouTube/Playlist.'); return; }
