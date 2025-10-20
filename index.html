@@ -357,7 +357,7 @@
         const loc=qs('#teamLocation').value.trim();
         const url=qs('#youtubeUrl').value.trim();
         if(!name||!url){ alert('Preencha Nome e URL'); return; }
-        if(VIDEO_IDS.length>=4){ alert('Limite de 4 lives por painel atingido.'); return; }
+        if(VIDEO_IDS.length>=14){ alert('Limite de 14 lives por painel atingido.'); return; }
 
         const id=idFromUrl(url);
         if(!id){ alert('URL/ID inválido do YouTube/Playlist.'); return; }
