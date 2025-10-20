@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v15.5 - viewer restrito + inserir equipe fix + rename CPA estável -->
+  <!-- build: v15.3 - landing em lista + rename CPA + barra editor no CPA -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Preconnect -->
+  <!-- Preconnect para reduzir handshake do YT -->
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://i.ytimg.com">
   <link rel="preconnect" href="https://s.ytimg.com">
@@ -17,6 +17,7 @@
     * { box-sizing: border-box; }
     body { background:#111827; color:white; }
 
+    /* Grid dos vídeos */
     .grid-container { display:grid; gap:1rem; grid-template-columns:repeat(2,1fr); }
     @media (max-width:1024px){ .grid-container{ grid-template-columns:repeat(2,1fr);} }
     @media (max-width:640px){  .grid-container{ grid-template-columns:1fr;} }
@@ -31,9 +32,11 @@
 
     .tile-btn{ font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.35); backdrop-filter:blur(2px); }
     .tile-btn:hover{ background:rgba(255,255,255,.08); }
+    .drag-over{ outline:2px dashed #60a5fa; outline-offset:-6px; }
     .hidden { display:none!important; }
     .controls { z-index:15; }
 
+    /* Overlay Aguardando */
     .offline-overlay{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       text-align:center; padding:1rem;
@@ -46,6 +49,7 @@
       border:1px solid rgba(255,255,255,.25); border-radius:.5rem; font-size:.9rem; color:#e5e7eb;
     }
 
+    /* Selo AO VIVO (aparece só quando live=true) */
     .live-badge{
       position:absolute; top:.5rem; left:.5rem;
       display:none; align-items:center; gap:.35rem;
@@ -55,6 +59,7 @@
     .live-dot{ width:.45rem; height:.45rem; border-radius:999px; background:white; animation:pulse 1.2s infinite; }
     @keyframes pulse{ 0%{opacity:.4; transform:scale(.8)} 50%{opacity:1; transform:scale(1)} 100%{opacity:.4; transform:scale(.8)} }
 
+    /* QUALIDADE */
     .q-wrap{ position:absolute; right:.5rem; bottom:.5rem; display:flex; align-items:center; gap:.4rem; z-index:20; }
     .q-btn{ display:flex; align-items:center; gap:.35rem; font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.45); backdrop-filter:blur(2px); cursor:pointer; }
     .q-btn:hover{ background:rgba(255,255,255,.08); }
@@ -63,6 +68,7 @@
     .q-item:hover{ background:rgba(255,255,255,.08); }
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
 
+    /* Landing (lista simples de CPAs) */
     .list-wrap{ background:#0f172a; border:1px solid #253046; border-radius:12px; overflow:hidden; }
     .list-item{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-top:1px solid #253046; }
     .list-item:first-child{ border-top:0; }
@@ -72,7 +78,9 @@
     .btn-ghost:hover{ background:#1f2937; color:#fff; }
   </style>
 
+  <!-- YouTube API -->
   <script src="https://www.youtube.com/iframe_api"></script>
+  <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
@@ -82,9 +90,10 @@
     const qsa=(s,e=document)=>Array.from(e.querySelectorAll(s));
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
+    /* ===== Params (CPA / modo) ===== */
     const params=new URLSearchParams(location.search);
-    const CPA_KEY = params.get('cpa');                         // ex.: CPA1
-    const MODE=(params.get('mode')||'edit').toLowerCase();     // 'edit' | 'view'
+    const CPA_KEY = params.get('cpa');               // ex.: CPA1, CPA2...
+    const MODE=(params.get('mode')||'edit').toLowerCase();
     const isView = MODE==='view';
 
     /* ===== Login ===== */
@@ -95,22 +104,14 @@
     function auth_ok_until(){ const v=localStorage.getItem('auth_ok_until'); return v?parseInt(v,10):0; }
     function set_auth_ok(){ localStorage.setItem('auth_ok_until', String(Date.now()+REMEMBER_MIN*60*1000)); }
     function ensureAuthOrAsk(cb){
-      try{
-        if(auth_ok_until()>Date.now()) return cb(true);
-        const overlay=qs('#authOverlay'); overlay.style.display='flex';
-        const form=qs('#authForm');
-        const handler=(e)=>{ e.preventDefault();
-          const u=qs('#authUser').value.trim(), p=qs('#authPass').value;
-          if(u===AUTH_USER && p===AUTH_PASS){
-            set_auth_ok(); overlay.style.display='none';
-            form.removeEventListener('submit',handler); cb(true);
-          }else{
-            const err=qs('#authErr'); err.classList.remove('hidden');
-            setTimeout(()=>err.classList.add('hidden'),1500); cb(false);
-          }
-        };
-        form.addEventListener('submit', handler);
-      }catch(err){ console.error('Auth error', err); cb(false); }
+      if(auth_ok_until()>Date.now()) return cb(true);
+      const overlay=qs('#authOverlay'); overlay.style.display='flex';
+      const form=qs('#authForm');
+      const handler=(e)=>{ e.preventDefault(); const u=qs('#authUser').value.trim(), p=qs('#authPass').value;
+        if(u===AUTH_USER && p===AUTH_PASS){ set_auth_ok(); overlay.style.display='none'; form.removeEventListener('submit',handler); cb(true); }
+        else { const err=qs('#authErr'); err.classList.remove('hidden'); setTimeout(()=>err.classList.add('hidden'),1500); cb(false); }
+      };
+      form.addEventListener('submit', handler);
     }
 
     /* ===== Firebase ===== */
@@ -127,12 +128,15 @@
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
 
+    // Nó por CPA: dashboards/CPA1, dashboards/CPA2...
     const DB_PATH = CPA_KEY ? `dashboards/${CPA_KEY}` : null;
     const dbRef = DB_PATH ? db.ref(DB_PATH) : null;
+
+    // Metadados dos CPAs (títulos personalizados)
     const CPAS_META_PATH = 'cpas';
     const cpasRef = db.ref(CPAS_META_PATH);
 
-    /* ===== Estado ===== */
+    /* ===== Estado & controles ===== */
     let COLS=parseInt(params.get('cols')||'2',10);
     let VIEW_COLS_OVERRIDE=null;
 
@@ -155,11 +159,31 @@
     const Q_ORDER=['tiny','small','medium','large','hd720','hd1080','highres'];
     const Q_LABEL={tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',highres:'Máx.'};
 
+    // Placeholder institucional fixo (imagem neutra opcional)
     const PLACEHOLDER_IMG = "ARTE.png";
     const thumbUrl=(_id)=> PLACEHOLDER_IMG;
 
     function getSavedQ(id){ return localStorage.getItem(Q_KEY_PREFIX+id); }
     function saveQ(id,q){ localStorage.setItem(Q_KEY_PREFIX+id,q); }
+
+    function pickAvailableQuality(requested, available){
+      const avail=new Set(available||[]);
+      if (avail.has(requested)) return requested;
+      const idx=Q_ORDER.indexOf(requested);
+      if (idx>=0){ for(let i=idx;i>=0;i--) if (avail.has(Q_ORDER[i])) return Q_ORDER[i]; }
+      for(const q of Q_ORDER) if (avail.has(q)) return q;
+      return requested;
+    }
+    function enforceQuality(player, desired, cycles=10, interval=500){
+      let n=0; const iv=setInterval(()=>{
+        try{
+          const avail=player.getAvailableQualityLevels?player.getAvailableQualityLevels():[];
+          const best=pickAvailableQuality(desired, avail);
+          player.setPlaybackQuality?.(best);
+        }catch(_){}
+        if(++n>=cycles) clearInterval(iv);
+      }, interval);
+    }
 
     const idFromUrl=u=>{
       try{
@@ -176,6 +200,7 @@
     };
     const isPlaylistId=(id)=> typeof id==='string' && (id.startsWith('PL')||id.startsWith('UU')||id.startsWith('LL')||id.length>12);
 
+    /* ===== Live badge ===== */
     function setLiveBadge(cardEl, flag){
       if(!cardEl) return;
       let badge = cardEl.querySelector('[data-live-badge]');
@@ -189,8 +214,10 @@
       badge.style.display = flag ? 'inline-flex' : 'none';
     }
 
+    /* ===== YT ready ===== */
     window.onYouTubeIframeAPIReady=function(){ YT_READY=true; if(CPA_KEY){ renderAll(); } };
 
+    /* ===== Qualidade UI ===== */
     function qualityControlTemplate(currentLabel){
       return `
         <div class="q-wrap">
@@ -209,10 +236,10 @@
       `;
     }
 
+    /* ===== Global clicks ===== */
     document.addEventListener('click', (ev)=>{
       const rmBtn = ev.target.closest('[data-remove]');
-      if(rmBtn){
-        if(isView) return; // viewer nunca remove
+      if(rmBtn && !isView){
         const card = ev.target.closest('.video-card');
         if(!card) return;
         const id = card.getAttribute('data-vid');
@@ -260,6 +287,7 @@
       if(!ev.target.closest('.q-wrap')){ qsa('.q-menu').forEach(m=> m.style.display='none'); }
     });
 
+    /* ===== LRU + Evict ===== */
     function touchLRU(idx){ const pos = LRU.indexOf(idx); if(pos>=0) LRU.splice(pos,1); LRU.push(idx); }
     function evictIfNeeded(){
       while(activeGrid.size > MAX_CONCURRENT_GRID){
@@ -270,29 +298,14 @@
       }
     }
 
-    function pickAvailableQuality(requested, available){
-      const avail=new Set(available||[]);
-      if (avail.has(requested)) return requested;
-      const Q_ORDER=['highres','hd1080','hd720','large','medium','small','tiny'];
-      for(const q of Q_ORDER) if (avail.has(q)) return q;
-      return requested;
-    }
-    function enforceQuality(player, desired, cycles=10, interval=500){
-      let n=0; const iv=setInterval(()=>{
-        try{
-          const avail=player.getAvailableQualityLevels?player.getAvailableQualityLevels():[];
-          const best=pickAvailableQuality(desired, avail);
-          player.setPlaybackQuality?.(best);
-        }catch(_){}
-        if(++n>=cycles) clearInterval(iv);
-      }, interval);
-    }
-
+    /* ===== Players lifecycle (grid) ===== */
     function createGridPlayer(i, id, isPl){
       if(LOW_BW_MODE) return;
       if(activeGrid.size >= MAX_CONCURRENT_GRID){ evictIfNeeded(); if(activeGrid.size >= MAX_CONCURRENT_GRID) return; }
+
       const mountId = `yt_${i}`;
-      const savedQ = getSavedQ(id) || 'tiny';
+      const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
+
       const cfg = {
         width:'100%', height:'100%',
         playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
@@ -314,7 +327,7 @@
 
               e.target.mute(); e.target.playVideo();
               const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-              const best=pickAvailableQuality(savedQ, avail);
+              let best=pickAvailableQuality(savedQ, avail);
               e.target.setPlaybackQuality?.(best);
               enforceQuality(e.target, best);
 
@@ -331,6 +344,20 @@
               const online = (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING);
               setOfflineEl(`off_${i}`, !online);
               if(e.data===YT.PlayerState.ENDED) setLiveBadge(qs(`#card_${i}`), false);
+              if(e.data===YT.PlayerState.BUFFERING){
+                try{
+                  const cur = getSavedQ(id) || DEFAULT_QUALITY;
+                  const idx = Q_ORDER.indexOf(cur);
+                  if(idx>0){
+                    const down = Q_ORDER[idx-1];
+                    saveQ(id, down);
+                    players[i]?.setPlaybackQuality?.(down);
+                    enforceQuality(players[i], down, 6, 800);
+                    const card=qs(`#card_${i}`);
+                    const lbl=card?.querySelector('[data-qlabel]'); if(lbl) lbl.textContent=Q_LABEL[down]||down;
+                  }
+                }catch(_){}
+              }
             }
             touchLRU(i);
           }
@@ -354,9 +381,11 @@
     }
     function setOfflineEl(elId, flag){ const ov = document.getElementById(elId); if(ov) ov.style.display = flag ? 'flex' : 'none'; }
 
+    /* ===== Main player ===== */
     function createMain(id){
       const isPl = isPlaylistId(id);
-      const savedQ = getSavedQ(id) || 'tiny';
+      const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
+
       const cfg = {
         width:'100%', height:'100%',
         playerVars:{ autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
@@ -402,6 +431,7 @@
       mainPlayer = new YT.Player('yt_main', cfg);
     }
 
+    /* ===== Render ===== */
     function renderAll(){ renderMain(); renderGrid(); }
 
     function renderMain(){
@@ -417,7 +447,7 @@
       const loc   = LOCS[idx]   || '';
       const isPl  = isPlaylistId(id);
       const fullUrl = isPl ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}` : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-      const savedQ = getSavedQ(id) || 'tiny';
+      const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
 
       const card = document.createElement('div');
       card.className='video-card';
@@ -435,7 +465,7 @@
             ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
           </div>
           <div class="offline-overlay" id="off_main"><div class="offline-badge"><span>aguardando sinal</span></div></div>
-          ${qualityControlTemplate('144p')}
+          ${qualityControlTemplate(Q_LABEL[savedQ])}
         </div>
         <div class="px-3 pt-2 pb-3 bg-gray-800/70">
           <h3 class="font-semibold text-base">${esc(label)}</h3>
@@ -462,6 +492,7 @@
 
       idsForGrid.forEach((id,i)=>{
         const idxOriginal = VIDEO_IDS.indexOf(id);
+        const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
         const isPl=isPlaylistId(id);
         const fullUrl = isPl ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}` : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
         const card=document.createElement('div');
@@ -477,7 +508,7 @@
                ${isView ? '' : `<button class="tile-btn" data-remove>Remover</button>`}
              </div>
              <div class="offline-overlay" id="off_${i}"><div class="offline-badge"><span>aguardando sinal</span></div></div>
-             ${qualityControlTemplate('144p')}
+             ${qualityControlTemplate(Q_LABEL[savedQ])}
            </div>
            <div class="px-2 pt-1 pb-2 bg-gray-800/70">
              <h3 class="font-medium text-sm">${esc(LABELS[idxOriginal]||'Equipe '+(idxOriginal+1))}</h3>
@@ -502,6 +533,7 @@
       document.querySelectorAll('.video-card[data-idx]').forEach(card=> io.observe(card));
     }
 
+    /* ===== OFFLINE sync ===== */
     const OFFLINE_POLL_MS = 10000;
     setInterval(()=>{
       if(mainPlayer && typeof YT!=='undefined' && YT.PlayerState){
@@ -527,15 +559,15 @@
       });
     }, OFFLINE_POLL_MS);
 
+    /* ===== Realtime (por CPA) ===== */
     function saveRealtime(){
       if(!dbRef) return;
-      dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, main: MAIN_ID || null, ts:Date.now() })
-        .catch(err=>{ console.error('Erro ao salvar RTDB:', err); alert('Falha ao salvar no Firebase. Verifique conexão/permissões.'); });
+      dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, main: MAIN_ID || null, ts:Date.now() });
     }
     function subscribeRealtime(){
       if(!dbRef) return;
       dbRef.on('value', snap=>{
-        const j=snap.val(); if(!j) { renderAll(); return; }
+        const j=snap.val(); if(!j) return;
         const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
         COLS = parseInt(j.cols||COLS||2,10);
         MAIN_ID = j.main || MAIN_ID || newIds[0] || null;
@@ -544,38 +576,40 @@
       });
     }
 
+    /* ===== Header nome CPA (segunda página) ===== */
     function subscribeCpaTitle(){
       if(!CPA_KEY) return;
-      const node = cpasRef.child(CPA_KEY);
-      node.on('value', snap=>{
+      cfas = cpasRef.child(CPA_KEY);
+      cfas.on('value', snap=>{
         const t = (snap.val() && snap.val().title) ? snap.val().title : CPA_KEY;
         qs('#hdrSubtitle').textContent = `Painel — ${t}`;
         document.title = `Dashboard Drones — ${t}`;
       });
     }
 
-    /* Landing + renomear CPA (com auth) */
+    /* ===== Landing (sem ?cpa=): lista simples + renomear ===== */
     function renderLanding(){
       qs('#panelCPA')?.classList.add('hidden');
       qs('#editorControls')?.classList.add('hidden');
       const land = qs('#landing'); land.classList.remove('hidden');
       qs('#hdrSubtitle').textContent = 'Selecione um CPA';
 
-      const wrap = qs('#landingList'); wrap.innerHTML = '';
-      const defaults = { CPA1:'CPA 1', CPA2:'CPA 2', CPA3:'CPA 3', CPA4:'CPA 4' };
+      const wrap = qs('#landingList');
+      wrap.innerHTML = '';
+
+      const defaults = { CPA1:'CPA 6', CPA2:'CPA 7', CPA3:'CPA 8', CPA4:'CPA 12' };
 
       function renameCPA(key, currentTitle){
         ensureAuthOrAsk(async ok=>{
           if(!ok) return;
           const nv = prompt(`Novo nome para ${key}:`, currentTitle);
-          if(nv===null) return;
+          if(!nv) return;
           const title = nv.trim();
           if(!title) return;
           try{
             await db.ref(`${CPAS_META_PATH}/${key}`).set({ title });
             alert('Nome atualizado.');
           }catch(err){
-            console.error('Erro ao renomear CPA:', err);
             alert('Erro ao salvar o nome: ' + (err?.message || err));
           }
         });
@@ -590,6 +624,7 @@
           li.className='list-item';
 
           const left = document.createElement('div');
+          // Abre já em modo EDIT para mostrar a barra na 2ª página
           left.innerHTML = `<a href="${location.pathname}?cpa=${encodeURIComponent(key)}&mode=edit&cols=2" class="text-base">${esc(title)}</a>
                             <div class="text-xs text-slate-400 mt-0.5">${esc(key)}</div>`;
 
@@ -610,6 +645,7 @@
       });
     }
 
+    /* ===== Layout cols ===== */
     function applyGridCols(){
       const cols = (isView && VIEW_COLS_OVERRIDE!=null) ? VIEW_COLS_OVERRIDE : COLS;
       const grid=qs('#gridContainer');
@@ -619,20 +655,18 @@
 
     /* ===== Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
-      // Sem CPA -> Landing
-      if(!CPA_KEY){ renderLanding(); return; }
+      // Se NÃO tem CPA -> landing
+      if(!CPA_KEY){
+        renderLanding();
+        return;
+      }
 
-      // Com CPA
+      // Tem CPA: mostra painel e SEMPRE mostra os controles do topo
       qs('#panelCPA')?.classList.remove('hidden');
+      qs('#editorControls')?.classList.remove('hidden');
 
-      // Controles do topo: em VIEW só mostram layout/fullscreen/compartilhar
-      const ctrl = qs('#editorControls');
-      ctrl?.classList.remove('hidden');
-      qs('#btnConfig')?.classList.toggle('hidden', isView);
-      qs('#btnClearAll')?.classList.toggle('hidden', isView);
-      // LOW BW pode ser útil no viewer também, então mantive visível
-
-      // Layout: viewer muda local (sem salvar); editor salva em RTDB
+      // Layout selector: permite trocar localmente em qualquer modo;
+      // se não for 'view', também salva para o RTDB
       qs('#layout')?.addEventListener('change', ()=>{
         const val = parseInt(qs('#layout').value,10)||2;
         VIEW_COLS_OVERRIDE = val;
@@ -640,36 +674,34 @@
         if(!isView){ COLS = val; saveRealtime(); }
       });
 
+      // Login (só para ações de edição)
+      if(auth_ok_until()<=Date.now()){
+        // Apenas abre quando for necessário (ex.: Inserir Equipe)
+        // Aqui mantemos overlay fechado
+      }
+
+      // Botões topo
       qs('#btnFullscreen')?.addEventListener('click',()=>{
         if(!document.fullscreenElement) document.documentElement.requestFullscreen();
         else document.exitFullscreen();
       });
 
-      // Inserir Equipe: exige auth e só no modo edit
       qs('#btnConfig')?.addEventListener('click', ()=>{
-        if(isView) return; // nunca abre no viewer
         ensureAuthOrAsk(ok=>{ if(ok) qs('#configModal').classList.remove('hidden'); });
       });
 
-      // Botão Adicionar dentro do modal
-      qs('#btnAddTeam')?.addEventListener('click', (e)=>{
+      qs('#btnAddTeam')?.addEventListener('click', e=>{
         e.preventDefault();
-        if(isView) return; // segurança extra
-        ensureAuthOrAsk(ok=>{
-          if(!ok) return;
-          const name=qs('#teamName').value.trim();
-          const loc=qs('#teamLocation').value.trim();
-          const url=qs('#youtubeUrl').value.trim();
-          if(!name||!url){ alert('Preencha Nome e URL'); return; }
-          const id=idFromUrl(url);
-          if(!id){ alert('URL inválida do YouTube/Playlist.'); return; }
-          if(!dbRef){ alert('CPA inválido na URL. Abra via landing.'); return; }
-          VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
-          if(!getSavedQ(id)) saveQ(id, 'tiny');
-          if(!MAIN_ID) MAIN_ID = id;
-          saveRealtime(); renderAll();
-          qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
-        });
+        const name=qs('#teamName').value.trim();
+        const loc=qs('#teamLocation').value.trim();
+        const url=qs('#youtubeUrl').value.trim();
+        if(!name||!url){ alert('Preencha Nome e URL'); return; }
+        const id=idFromUrl(url);
+        VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
+        if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
+        if(!MAIN_ID) MAIN_ID = id;
+        saveRealtime(); renderAll();
+        qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
       });
 
       qs('#btnShare')?.addEventListener('click', ()=>{
@@ -691,7 +723,6 @@
       });
 
       qs('#btnClearAll')?.addEventListener('click', ()=>{
-        if(isView) return; // viewer não limpa
         ensureAuthOrAsk(ok=>{
           if(!ok) return;
           if(!confirm('Apagar TODAS as equipes do dashboard deste CPA?')) return;
@@ -720,11 +751,11 @@
       <form id="authForm" class="space-y-3">
         <div>
           <label class="block text-sm mb-1">Usuário</label>
-          <input id="authUser" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="usuário" autocomplete="username">
+          <input id="authUser" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="usuário">
         </div>
         <div>
           <label class="block text-sm mb-1">Senha</label>
-          <input id="authPass" type="password" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="senha" autocomplete="current-password">
+          <input id="authPass" type="password" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2" placeholder="senha">
         </div>
         <button class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Entrar</button>
         <p id="authErr" class="text-red-400 text-sm hidden">Usuário ou senha incorretos.</p>
@@ -735,6 +766,7 @@
   <!-- Header -->
   <header class="p-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
     <div class="max-w-7xl mx-auto flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <!-- Esquerda -->
       <div class="flex items-center gap-3">
         <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png"
              alt="PMESP"
@@ -742,13 +774,14 @@
         <div class="flex items-center gap-3">
           <div>
             <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones</h1>
-            <p id="hdrSubtitle" class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v15.5</p>
+            <p id="hdrSubtitle" class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • v15.3</p>
           </div>
           <img src="qualidade%20melhor%20-Photoroom.png" alt="Comando de Aviação da PMESP"
                class="w-10 h-10 object-contain rounded bg-white/5 p-1 ml-1">
         </div>
       </div>
 
+      <!-- Direita: controles do topo (na landing ficam escondidos; no CPA aparecem sempre) -->
       <div id="editorControls" class="flex items-center gap-2 hidden">
         <label class="text-xs text-gray-400">Layout</label>
         <select id="layout" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
@@ -759,13 +792,13 @@
         <button id="btnFullscreen" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Tela Cheia</button>
         <button id="btnShare" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Gerar Link</button>
         <button id="btnConfig" class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm">Inserir Equipe</button>
-        <button id="btnLowBW" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm" title="Pausa/destrói players do GRID para economizar banda/CPU.">Modo Baixa Largura: OFF</button>
+        <button id="btnLowBW" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm" title="Quando ON: pausa/destrói os players do GRID para economizar banda/CPU. O principal continua normal.">Modo Baixa Largura: OFF</button>
         <button id="btnClearAll" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm">Limpar</button>
       </div>
     </div>
   </header>
 
-  <!-- LANDING -->
+  <!-- LANDING (lista simples, sem arte) -->
   <section id="landing" class="max-w-7xl mx-auto p-4 hidden">
     <div class="mb-3">
       <h2 class="text-xl font-semibold">Comandos de Policiamento (CPA)</h2>
@@ -803,17 +836,18 @@
             <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://www.youtube.com/playlist?list=PLxxx ou https://www.youtube.com/watch?v=abc123">
           </div>
           <div class="flex gap-3 pt-2">
-            <button id="btnAddTeam" type="button" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
+            <button id="btnAddTeam" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
             <button type="button" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
               onclick="document.getElementById('configModal').classList.add('hidden'); document.getElementById('teamForm').reset();">
               Cancelar
             </button>
           </div>
         </form>
-        <p class="mt-3 text-xs text-slate-400 text-center">Salva em <code>dashboards/CPA*</code> no Firebase Realtime Database.</p>
+        <p class="mt-3 text-xs text-slate-400 text-center">Este painel salva em <code>dashboards/CPA*</code> no Firebase Realtime Database.</p>
       </div>
     </div>
   </div>
 
 </body>
 </html>
+
