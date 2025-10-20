@@ -30,7 +30,9 @@
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
   </style>
 
+  <!-- YouTube API -->
   <script src="https://www.youtube.com/iframe_api"></script>
+  <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
@@ -39,12 +41,12 @@
     const qs=(s,e=document)=>e.querySelector(s);
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
-    /* ===== Params / Modo / CPA (definir ANTES) ===== */
+    /* ===== Params / Modo ===== */
     const params = new URLSearchParams(location.search);
     const MODE   = (params.get('mode') || 'edit').toLowerCase();
     const isView = MODE === 'view';
 
-    // CPA fixo deste arquivo
+    /* ===== CPA fixo deste arquivo ===== */
     const FORCE_CPA = 'OP1';
     const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
     const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
@@ -169,7 +171,8 @@
         <div class="q-wrap">
           <button type="button" class="q-btn" data-qbtn>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="opacity-90">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.89 3.31.877 2.42 2.42a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.89 1.543-.877 3.31-2.42 2.42a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.89-3.31-.877-2.42-2.42A1.724 1.724 0 004.317 13.65c-1.756-.426-1.756-2.924 0-3.35A1.724 1.724 0 005.383 7.73c-.89-1.543.877-3.31 2.42-2.42.99.57 2.232.04 2.522-.993z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.89 3.31.877 2.42 2.42a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.89 1.543-.877 3.31-2.42 2.42a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.89-3.31-.877-2.42-2.42A1.724 1.724 0 004.317 13.65c-1.756-.426-1.756-2.924 0-3.35A1.724 1.724 0 005.383 7.73c-.89-1.543.877-3.31 2.42-2.42.99.57 2.232.04 2.522-.993z"/>
               <circle cx="12" cy="12" r="3" stroke-width="2"></circle>
             </svg>
             <span data-qlabel>${currentLabel}</span>
@@ -369,8 +372,7 @@
         const url  = new URL(base);
         url.searchParams.set('mode','view');
         url.searchParams.set('cols', String(COLS));
-        // não precisa setar cpa — ele é fixo, mas não atrapalha se quiser manter
-        url.searchParams.set('cpa', CPA_KEY);
+        url.searchParams.set('cpa', CPA_KEY); // opcional; CPA já é fixo
         navigator.clipboard.writeText(url.toString())
           .then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
       });
@@ -388,6 +390,7 @@
   </script>
 </head>
 <body class="min-h-screen">
+
   <!-- Overlay de Login (só editor) -->
   <div id="authOverlay" class="fixed inset-0 z-[1000] hidden items-center justify-center bg-black/70">
     <div class="bg-gray-800 text-white w-full max-w-sm rounded-xl shadow-xl p-6">
@@ -473,5 +476,6 @@
       </div>
     </div>
   </div>
+
 </body>
 </html>
