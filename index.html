@@ -73,11 +73,15 @@
     const dbRef=db.ref(DB_PATH);
 
     /* ===== Estado & Params ===== */
-    const params=new URLSearchParams(location.search);
-    const MODE=(params.get('mode')||'edit').toLowerCase();
-    const isView = MODE==='view';
-    let COLS=parseInt(params.get('cols')||'2',10);
-    let VIEW_COLS_OVERRIDE=null; // seleção local do visualizador
+ // DEPOIS (com fallback pelo nome do arquivo: cpa6.html -> CPA6)
+const params = new URLSearchParams(location.search);
+// se a página se chama .../cpa6.html ou .../cpa12.html eu deduzo o CPA pela URL:
+const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
+const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
+const CPA_KEY = params.get('cpa') || CPA_FALLBACK;  // <- agora nunca vem vazio se abrir cpa6.html, cpa7.html etc.
+const MODE = (params.get('mode') || 'edit').toLowerCase();
+const isView = MODE === 'view';
+
 
     // IMPORTANTE: agora 'VIDEO_IDS' carrega PLAYLIST IDS
     let VIDEO_IDS=[], LABELS=[], LOCS=[];
