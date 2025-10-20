@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v9-rt-plus-viewcols+clear -->
+  <!-- build: v9.1 - CPA dinâmico + fix COLS + limite 4 + 1 onYouTubeIframeAPIReady -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -21,8 +21,6 @@
     .tile-btn:hover{ background:rgba(255,255,255,.08); }
     .drag-over{ outline:2px dashed #60a5fa; outline-offset:-6px; }
     .hidden { display:none!important; }
-
-    /* ===== QUALIDADE (ícone + menu) ===== */
     .q-wrap{ position:absolute; right:.5rem; bottom:.5rem; display:flex; align-items:center; gap:.4rem; }
     .q-btn{ display:flex; align-items:center; gap:.35rem; font-size:12px; padding:4px 8px; border:1px solid rgba(255,255,255,.15); border-radius:8px; background:rgba(0,0,0,.45); backdrop-filter:blur(2px); }
     .q-btn:hover{ background:rgba(255,255,255,.08); }
@@ -41,12 +39,20 @@
   <script>
   (function(){
     const qs=(s,e=document)=>e.querySelector(s);
+    const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
-    /* ===== Login universal (apenas Editor) ===== */
+    /* ===== Params / CPA ===== */
+    const params = new URLSearchParams(location.search);
+    const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
+    const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
+    const CPA_KEY = params.get('cpa') || CPA_FALLBACK;             // CPA6/CPA7/CPA8/CPA12
+    const MODE = (params.get('mode') || 'edit').toLowerCase();     // 'edit' | 'view'
+    const isView = MODE === 'view';
+
+    /* ===== Login (só Editor) ===== */
     const AUTH_USER='OPERACAOCPM';
     const AUTH_PASS='CAVPMDRONES';
-    const REMEMBER_MIN=240; // 4h
-
+    const REMEMBER_MIN=240;
     function auth_ok_until(){ const v=localStorage.getItem('auth_ok_until'); return v?parseInt(v,10):0; }
     function set_auth_ok(){ localStorage.setItem('auth_ok_until', String(Date.now()+REMEMBER_MIN*60*1000)); }
     function doLogin(){
@@ -55,7 +61,7 @@
       err?.classList.remove('hidden'); setTimeout(()=>err?.classList.add('hidden'),1500); return false;
     }
 
-    /* ===== Firebase: SUA CONFIG ===== */
+    /* ===== Firebase ===== */
     const FIREBASE = {
       apiKey: "AIzaSyDadspZB30sQOgZr7PTcSbub1ZJB80Kui4",
       authDomain: "dashboarddronepmesp.firebaseapp.com",
@@ -66,49 +72,36 @@
       appId: "1:769998411213:web:f0ecce2126f0af9b4a2084",
       measurementId: "G-4TVLS703CF"
     };
-    const DB_PATH='dashboards/main'; // caminho único
-
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
+
+    // 👇 AGORA cada página salva no seu nó:
+    const DB_PATH = CPA_KEY ? `dashboards/${CPA_KEY}` : 'dashboards/DEFAULT';
     const dbRef=db.ref(DB_PATH);
 
-    /* ===== Estado & Params ===== */
- // DEPOIS (com fallback pelo nome do arquivo: cpa6.html -> CPA6)
-const params = new URLSearchParams(location.search);
-// se a página se chama .../cpa6.html ou .../cpa12.html eu deduzo o CPA pela URL:
-const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
-const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
-const CPA_KEY = params.get('cpa') || CPA_FALLBACK;  // <- agora nunca vem vazio se abrir cpa6.html, cpa7.html etc.
-const MODE = (params.get('mode') || 'edit').toLowerCase();
-const isView = MODE === 'view';
+    /* ===== Estado ===== */
+    let COLS=parseInt(params.get('cols')||'2',10);
+    let VIEW_COLS_OVERRIDE=null;
 
-
-    // IMPORTANTE: agora 'VIDEO_IDS' carrega PLAYLIST IDS
     let VIDEO_IDS=[], LABELS=[], LOCS=[];
     let YT_READY=false;
 
-    /* ===== Qualidade (padrão 144p e persistência por playlist) ===== */
-    const DEFAULT_QUALITY='tiny'; // 144p
+    /* ===== Qualidade ===== */
+    const DEFAULT_QUALITY='tiny';
     const Q_KEY_PREFIX='liveQ_';
     const Q_ORDER=['tiny','small','medium','large','hd720','hd1080','highres'];
     const Q_LABEL={tiny:'144p',small:'240p',medium:'360p',large:'480p',hd720:'720p',hd1080:'1080p',highres:'Máx.'};
-
     function getSavedQ(id){ return localStorage.getItem(Q_KEY_PREFIX+id); }
     function saveQ(id,q){ localStorage.setItem(Q_KEY_PREFIX+id,q); }
-
     function pickAvailableQuality(requested, available){
       const avail=new Set(available||[]);
       if (avail.has(requested)) return requested;
-      const idx=Q_ORDER.indexOf(requested);
-      if (idx>=0){
-        for(let i=idx;i>=0;i--) if (avail.has(Q_ORDER[i])) return Q_ORDER[i];
-      }
-      for(const q of Q_ORDER) if (avail.has(q)) return q;
+      for(const q of ['highres','hd1080','hd720','large','medium','small','tiny'])
+        if(avail.has(q)) return q;
       return requested;
     }
     function enforceQuality(player, desired, cycles=8, interval=450){
-      let n=0;
-      const iv=setInterval(()=>{
+      let n=0; const iv=setInterval(()=>{
         try{
           const avail=player.getAvailableQualityLevels?player.getAvailableQualityLevels():[];
           const best=pickAvailableQuality(desired, avail);
@@ -119,20 +112,27 @@ const isView = MODE === 'view';
     }
 
     /* ===== Utils ===== */
-    const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-    // Extrai PLAYLIST ID (list=) ou aceita ID cru
-    const idFromUrl=u=>{
+    // aceita playlist (list=), vídeo normal, shorts, live, youtu.be e ID cru
+    const YT_ID_RE=/^[a-zA-Z0-9_-]{10,}$/;
+    function idFromUrl(input){
+      if(!input) return '';
+      let u=input.trim();
       try{
         const url=new URL(u);
-        const listParam=url.searchParams.get('list');
-        if(listParam) return listParam;
-        // /playlist?list=... é coberto acima; se cair aqui e tiver 'list=' no texto:
-      }catch(_){}
-      if(typeof u==='string' && u.includes('list=')) return u.split('list=')[1].split('&')[0];
-      return (u||'').trim();
-    };
+        url.hostname=url.hostname.replace(/^m\./,'').replace(/^music\./,'');
+        const list=url.searchParams.get('list'); if(list) return list;
+        const v=url.searchParams.get('v'); if(v) return v;
+        const m=url.pathname.match(/\/(shorts|live)\/([a-zA-Z0-9_-]{10,})/); if(m) return m[2];
+        if(url.hostname.includes('youtu.be')){ const p=url.pathname.replace(/^\/+/,'').split('/')[0]; if(p) return p; }
+      }catch(_){
+        if(u.includes('list=')) return u.split('list=')[1].split('&')[0];
+        if(u.includes('watch?v=')) return u.split('watch?v=')[1].split('&')[0];
+      }
+      if(YT_ID_RE.test(u)) return u;
+      return '';
+    }
 
-    /* ===== Drag & Drop (editor) ===== */
+    /* ===== Drag & Drop ===== */
     let dragSrcIndex=null;
     function attachDnD(cardEl, index){
       if(isView) return;
@@ -150,28 +150,25 @@ const isView = MODE === 'view';
         move(VIDEO_IDS,dragSrcIndex,targetIndex);
         move(LABELS,   dragSrcIndex,targetIndex);
         move(LOCS,     dragSrcIndex,targetIndex);
-        saveRealtime(); // salva ordem
-        renderGrid();  // re-render editor
+        saveRealtime();
+        renderGrid();
       });
     }
 
-    /* ===== YouTube ===== */
+    /* ===== YouTube Ready ===== */
     window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
 
     function applyGridCols(){
       const cols = (isView && VIEW_COLS_OVERRIDE!=null) ? VIEW_COLS_OVERRIDE : COLS;
       const grid=qs('#gridContainer');
       if(grid) grid.style.gridTemplateColumns=`repeat(${cols}, 1fr)`;
-      const layout=qs('#layout');
-      if(layout) layout.value=String(cols);
+      const layout=qs('#layout'); if(layout) layout.value=String(cols);
     }
 
-    // cria o HTML do seletor (ícone engrenagem + menu)
     function qualityControlTemplate(currentLabel){
       return `
         <div class="q-wrap">
           <button type="button" class="q-btn" data-qbtn>
-            <!-- ícone engrenagem -->
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="opacity-90">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.89 3.31.877 2.42 2.42a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.89 1.543-.877 3.31-2.42 2.42a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.89-3.31-.877-2.42-2.42A1.724 1.724 0 004.317 13.65c-1.756-.426-1.756-2.924 0-3.35A1.724 1.724 0 005.383 7.73c-.89-1.543.877-3.31 2.42-2.42.99.57 2.232.04 2.522-.993z"/>
@@ -180,11 +177,7 @@ const isView = MODE === 'view';
             <span data-qlabel>${currentLabel}</span>
           </button>
           <div class="q-menu" data-qmenu>
-            ${Q_ORDER.map(q=>`
-              <div class="q-item" data-q="${q}">
-                <span class="q-dot"></span>${Q_LABEL[q]}
-              </div>
-            `).join('')}
+            ${Q_ORDER.map(q=>`<div class="q-item" data-q="${q}"><span class="q-dot"></span>${Q_LABEL[q]}</div>`).join('')}
           </div>
         </div>
       `;
@@ -199,7 +192,7 @@ const isView = MODE === 'view';
       if(LOCS.length<VIDEO_IDS.length){   for(let i=LOCS.length;i<VIDEO_IDS.length;i++)   LOCS[i]=''; }
 
       if(!VIDEO_IDS.length){
-        grid.innerHTML=isView?'Aguardando configuração do operador.':'Clique em <b>Inserir Equipe</b> ou use o botão <b>Inserir Equipe</b> no topo.';
+        grid.innerHTML=isView?'Aguardando configuração do operador.':'Clique em <b>Inserir Equipe</b> no topo.';
         return;
       }
 
@@ -227,7 +220,6 @@ const isView = MODE === 'view';
                  })()">Remover</button>`}
              </div>
 
-             <!-- Qualidade: canto inferior direito -->
              ${qualityControlTemplate(Q_LABEL[savedQ])}
            </div>
 
@@ -239,14 +231,10 @@ const isView = MODE === 'view';
         grid.appendChild(card);
         attachDnD(card,i);
 
-        // Instancia player YouTube (AGORA VIA PLAYLIST)
         if(YT_READY){
           const player = new YT.Player(`yt_${i}`,{
             width:'100%', height:'100%',
-            playerVars:{
-              listType:'playlist', list:id,
-              autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1
-            },
+            playerVars:{ listType:'playlist', list:id, autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
             events:{
               onReady:e=>{
                 try{ e.target.mute(); e.target.playVideo(); }catch(_){}
@@ -255,7 +243,6 @@ const isView = MODE === 'view';
                 const best=pickAvailableQuality(desired, avail);
                 e.target.setPlaybackQuality && e.target.setPlaybackQuality(best);
                 enforceQuality(e.target, best);
-                // Sincroniza label no botão
                 const qLabel=card.querySelector('[data-qlabel]');
                 if(qLabel) qLabel.textContent=Q_LABEL[best]||best;
                 if(!getSavedQ(id)) saveQ(id, best);
@@ -271,7 +258,6 @@ const isView = MODE === 'view';
             }
           });
 
-          // Comportamento do menu de qualidade
           const qBtn = card.querySelector('[data-qbtn]');
           const qMenu= card.querySelector('[data-qmenu]');
           const qLabel=card.querySelector('[data-qlabel]');
@@ -286,15 +272,11 @@ const isView = MODE === 'view';
               const q=item.getAttribute('data-q');
               saveQ(id,q);
               qLabel.textContent=Q_LABEL[q]||q;
-              try{
-                player.setPlaybackQuality && player.setPlaybackQuality(q);
-                enforceQuality(player, q);
-              }catch(_){}
+              try{ player.setPlaybackQuality && player.setPlaybackQuality(q); enforceQuality(player, q); }catch(_){}
               qMenu.style.display='none';
             });
           });
 
-          // Fechar quando clicar fora
           document.addEventListener('click', (ev)=>{
             if (!qMenu.contains(ev.target) && !qBtn.contains(ev.target)){
               qMenu.style.display='none';
@@ -318,15 +300,12 @@ const isView = MODE === 'view';
                         [...newIds].sort().join(',') === [...VIDEO_IDS].sort().join(',');
 
         if(sameSet && YT_READY){
-          // reordena DOM sem recriar players
           const grid=qs('#gridContainer');
           newIds.forEach(id=>{
             const el=document.getElementById(`card_${id}`);
             if(el) grid.appendChild(el);
           });
           VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-
-          // atualiza textos
           newIds.forEach((id,idx)=>{
             const card=document.getElementById(`card_${id}`);
             if(card){
@@ -335,8 +314,6 @@ const isView = MODE === 'view';
               if(loc)   loc.textContent=newLocs[idx]||'';
             }
           });
-
-          // aplica colunas (respeitando override do viewer)
           applyGridCols();
         } else {
           VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
@@ -345,14 +322,13 @@ const isView = MODE === 'view';
       });
     }
 
-    /* ===== UI Init ===== */
+    /* ===== Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
       // Mostrar/ocultar botões conforme modo
       qs('#btnShare')?.classList.toggle('hidden', isView);
       qs('#btnConfig')?.classList.toggle('hidden', isView);
       qs('#btnClearAll')?.classList.toggle('hidden', isView);
 
-      // login só no editor
       if(!isView){
         if(auth_ok_until()<=Date.now()){
           qs('#authOverlay').style.display='flex';
@@ -362,64 +338,56 @@ const isView = MODE === 'view';
         qs('#authOverlay').style.display='none';
       }
 
-      // Cabeçalho
       qs('#btnFullscreen')?.addEventListener('click',()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
 
-      // Layout select:
       qs('#layout')?.addEventListener('change', ()=>{
         const val = parseInt(qs('#layout').value,10)||2;
         if(isView){
-          // apenas local (override), sem salvar no Firebase
-          VIEW_COLS_OVERRIDE = val;
-          applyGridCols();
+          VIEW_COLS_OVERRIDE = val; applyGridCols();
         } else {
-          // editor: salva no Firebase
-          COLS = val;
-          saveRealtime();
-          applyGridCols();
+          COLS = val; saveRealtime(); applyGridCols();
         }
       });
 
-      // Inserir equipe (editor)
+      // Inserir equipe (limite 4 por painel)
       qs('#btnAddTeam')?.addEventListener('click', e=>{
         e.preventDefault();
         const name=qs('#teamName').value.trim();
         const loc=qs('#teamLocation').value.trim();
         const url=qs('#youtubeUrl').value.trim();
         if(!name||!url){ alert('Preencha Nome e URL'); return; }
-        const id=idFromUrl(url); // agora extrai PLAYLIST ID
+        if(VIDEO_IDS.length>=4){ alert('Limite de 4 lives por painel atingido.'); return; }
+
+        const id=idFromUrl(url);
+        if(!id){ alert('URL/ID inválido do YouTube/Playlist.'); return; }
+        if(VIDEO_IDS.includes(id)){ alert('Esta equipe (ID) já está no painel.'); return; }
+
         VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
-        // Qualidade padrão (144p) para a nova PLAYLIST
         if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
         saveRealtime();
         renderGrid();
         qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
       });
 
-      // Share link (editor)
+      // Share link (inclui o CPA correto)
       qs('#btnShare')?.addEventListener('click', ()=>{
         const base=location.origin+location.pathname;
         const url=new URL(base);
         url.searchParams.set('mode','view');
         url.searchParams.set('cols', String(COLS));
-        url.searchParams.set('sync','rt');
+        if(CPA_KEY) url.searchParams.set('cpa', CPA_KEY);
         navigator.clipboard.writeText(url.toString()).then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
       });
 
-      // Limpar tudo (editor)
+      // Limpar tudo
       qs('#btnClearAll')?.addEventListener('click', ()=>{
-        if(!confirm('Apagar TODAS as equipes do dashboard?')) return;
+        if(!confirm('Apagar TODAS as equipes do painel?')) return;
         VIDEO_IDS=[]; LABELS=[]; LOCS=[];
-        saveRealtime();
-        renderGrid();
+        saveRealtime(); renderGrid();
       });
 
-      // Start RT e primeira render
       subscribeRealtime();
     });
-
-    // (mantemos UMA definição – antes havia duas)
-    window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
   })();
   </script>
 </head>
@@ -494,8 +462,8 @@ const isView = MODE === 'view';
             <input id="teamLocation" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Rua / Bairro / Ponto de referência">
           </div>
           <div>
-            <label class="block text-sm mb-1">URL da Playlist do YouTube</label>
-            <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://www.youtube.com/playlist?list=PLxxxxxxx">
+            <label class="block text-sm mb-1">URL da Playlist/Vídeo do YouTube</label>
+            <input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://youtu.be/ID • https://www.youtube.com/watch?v=ID • /shorts/ID • /live/ID • playlist?list=LISTID">
           </div>
           <div class="flex gap-3 pt-2">
             <button id="btnAddTeam" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
