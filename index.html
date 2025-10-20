@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v9.1.1 - fix ordem params/isView + CPA estável -->
+  <!-- build: v9.1.2 - robustez no RT vazio + share estável -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -41,14 +41,13 @@
     const qs=(s,e=document)=>e.querySelector(s);
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
-    /* ===== Params / Modo / CPA (definir ANTES de usar) ===== */
+    /* ===== Params / Modo / CPA ===== */
     const params = new URLSearchParams(location.search);
-    const MODE   = (params.get('mode') || 'edit').toLowerCase();   // 'edit' | 'view'
+    const MODE   = (params.get('mode') || 'edit').toLowerCase();
     const isView = MODE === 'view';
 
     const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
     const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
-    // Sempre resolve e padroniza
     const CPA_KEY = String((params.get('cpa') || CPA_FALLBACK || 'DEFAULT')).toUpperCase();
 
     /* ===== Login (só Editor) ===== */
@@ -77,14 +76,13 @@
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
 
-    // Cada página salva no seu nó (sempre presente)
+    // Nó do painel (compatível com o seu index atual)
     const DB_PATH = `dashboards/${CPA_KEY}`;
     const dbRef=db.ref(DB_PATH);
 
     /* ===== Estado ===== */
     let COLS=parseInt(params.get('cols')||'2',10);
     let VIEW_COLS_OVERRIDE=null;
-
     let VIDEO_IDS=[], LABELS=[], LOCS=[];
     let YT_READY=false;
 
@@ -293,7 +291,8 @@
     }
     function subscribeRealtime(){
       dbRef.on('value', snap=>{
-        const j=snap.val(); if(!j){ VIDEO_IDS=[]; LABELS=[]; LOCS=[]; renderGrid(); return; }
+        const j=snap.val(); 
+        if(!j){ VIDEO_IDS=[]; LABELS=[]; LOCS=[]; renderGrid(); return; }
         const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
         COLS = parseInt(j.cols||COLS||2,10);
 
@@ -370,13 +369,13 @@
         qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
       });
 
-      // Share link (inclui o CPA correto)
+      // Share link (inclui o CPA atual)
       qs('#btnShare')?.addEventListener('click', ()=>{
         const base = location.origin + location.pathname;
         const url  = new URL(base);
         url.searchParams.set('mode','view');
         url.searchParams.set('cols', String(COLS));
-        url.searchParams.set('cpa', CPA_KEY); // sempre carregar o mesmo nó
+        url.searchParams.set('cpa', CPA_KEY);
         navigator.clipboard.writeText(url.toString())
           .then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
       });
