@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones</title>
-  <!-- build: v9.1 - CPA dinâmico + fix COLS + limite 4 + 1 onYouTubeIframeAPIReady -->
+  <!-- build: v9.1.1 - fix ordem params/isView + CPA estável -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -41,12 +41,15 @@
     const qs=(s,e=document)=>e.querySelector(s);
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
-    /* ===== Params / CPA ===== */
-const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
-const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
-// Sempre resolve para algo e padroniza (ex.: "CPA6" ou "DEFAULT")
-const CPA_KEY = String((params.get('cpa') || CPA_FALLBACK || 'DEFAULT')).toUpperCase();
+    /* ===== Params / Modo / CPA (definir ANTES de usar) ===== */
+    const params = new URLSearchParams(location.search);
+    const MODE   = (params.get('mode') || 'edit').toLowerCase();   // 'edit' | 'view'
+    const isView = MODE === 'view';
 
+    const pathCpaMatch = (location.pathname || '').match(/cpa(\d+)\.html$/i);
+    const CPA_FALLBACK = pathCpaMatch ? `CPA${pathCpaMatch[1]}` : null;
+    // Sempre resolve e padroniza
+    const CPA_KEY = String((params.get('cpa') || CPA_FALLBACK || 'DEFAULT')).toUpperCase();
 
     /* ===== Login (só Editor) ===== */
     const AUTH_USER='OPERACAOCPM';
@@ -74,8 +77,8 @@ const CPA_KEY = String((params.get('cpa') || CPA_FALLBACK || 'DEFAULT')).toUpper
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
 
-    // 👇 AGORA cada página salva no seu nó:
-    const DB_PATH = CPA_KEY ? `dashboards/${CPA_KEY}` : 'dashboards/DEFAULT';
+    // Cada página salva no seu nó (sempre presente)
+    const DB_PATH = `dashboards/${CPA_KEY}`;
     const dbRef=db.ref(DB_PATH);
 
     /* ===== Estado ===== */
@@ -111,7 +114,6 @@ const CPA_KEY = String((params.get('cpa') || CPA_FALLBACK || 'DEFAULT')).toUpper
     }
 
     /* ===== Utils ===== */
-    // aceita playlist (list=), vídeo normal, shorts, live, youtu.be e ID cru
     const YT_ID_RE=/^[a-zA-Z0-9_-]{10,}$/;
     function idFromUrl(input){
       if(!input) return '';
@@ -291,7 +293,7 @@ const CPA_KEY = String((params.get('cpa') || CPA_FALLBACK || 'DEFAULT')).toUpper
     }
     function subscribeRealtime(){
       dbRef.on('value', snap=>{
-        const j=snap.val(); if(!j) return;
+        const j=snap.val(); if(!j){ VIDEO_IDS=[]; LABELS=[]; LOCS=[]; renderGrid(); return; }
         const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
         COLS = parseInt(j.cols||COLS||2,10);
 
@@ -369,16 +371,15 @@ const CPA_KEY = String((params.get('cpa') || CPA_FALLBACK || 'DEFAULT')).toUpper
       });
 
       // Share link (inclui o CPA correto)
-qs('#btnShare')?.addEventListener('click', ()=>{
-  const base = location.origin + location.pathname;
-  const url  = new URL(base);
-  url.searchParams.set('mode','view');
-  url.searchParams.set('cols', String(COLS));
-  // SEMPRE levar o CPA atual no link (mesmo que seja DEFAULT)
-  url.searchParams.set('cpa', CPA_KEY);
-  navigator.clipboard.writeText(url.toString())
-    .then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
-});
+      qs('#btnShare')?.addEventListener('click', ()=>{
+        const base = location.origin + location.pathname;
+        const url  = new URL(base);
+        url.searchParams.set('mode','view');
+        url.searchParams.set('cols', String(COLS));
+        url.searchParams.set('cpa', CPA_KEY); // sempre carregar o mesmo nó
+        navigator.clipboard.writeText(url.toString())
+          .then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
+      });
 
       // Limpar tudo
       qs('#btnClearAll')?.addEventListener('click', ()=>{
