@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones — COMUNIDADE FERRAZÓPOLIS</title>
-  <!-- build: v9.1.1-op2 - CPA fixo (OP2) + root v2 + sem limite de lives -->
+  <!-- build: v9.1.2-op2 - CPA fixo (OP2) + root v2 + sem limite de lives + CAVPM logo -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -372,6 +372,7 @@
 </head>
 <body class="min-h-screen">
 
+  <!-- Overlay de login -->
   <div id="authOverlay" class="fixed inset-0 z-[1000] hidden items-center justify-center bg-black/70">
     <div class="bg-gray-800 text-white w-full max-w-sm rounded-xl shadow-xl p-6">
       <h2 class="text-lg font-semibold mb-4">Acesso restrito</h2>
@@ -384,12 +385,18 @@
     </div>
   </div>
 
+  <!-- Cabeçalho -->
   <header class="p-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
     <div class="max-w-7xl mx-auto flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
       <div class="flex items-center gap-3">
         <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png" alt="PMESP" class="w-10 h-10 object-contain rounded bg-white/5 p-1">
         <div>
-          <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones — COMUNIDADE FERRAZÓPOLIS</h1>
+          <!-- Título + LOGO CAVPM lado a lado -->
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones — COMUNIDADE FERRAZÓPOLIS</h1>
+            <!-- Coloque seu arquivo logo-cavpm.png na mesma pasta do index ou ajuste o src -->
+            <img src="cavpm.png" alt="CAVPM" class="w-10 h-10 object-contain rounded bg-white/5 p-1" title="Comando de Aviação da Polícia Militar (CAVPM)">
+          </div>
           <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • COMUNIDADE FERRAZÓPOLIS</p>
         </div>
       </div>
@@ -410,21 +417,32 @@
     </div>
   </header>
 
+  <!-- Grade -->
   <main class="p-4 max-w-7xl mx-auto">
     <div id="gridContainer" class="grid-container"></div>
   </main>
 
+  <!-- Modal Inserir Equipe -->
   <div id="configModal" class="fixed inset-0 bg-black/60 hidden z-50">
     <div class="flex items-center justify-center min-h-screen p-4">
       <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md">
         <h3 class="text-lg font-semibold mb-4 text-center">Inserir Equipe</h3>
         <form id="teamForm" class="space-y-4">
-          <div><label class="block text-sm mb-1">Nome da Equipe</label><input id="teamName" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Ex.: Equipe Alfa"></div>
-          <div><label class="block text-sm mb-1">Endereço da Operação</label><input id="teamLocation" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Rua / Bairro / Ponto de referência"></div>
-          <div><label class="block text-sm mb-1">URL da Playlist/Vídeo do YouTube</label><input id="youtubeUrl" type="url" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="https://youtu.be/ID • https://www.youtube.com/watch?v=ID • /shorts/ID • /live/ID • playlist?list=LISTID"></div>
-          <div class="flex gap-3 pt-2">
-            <button id="btnAddTeam" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded">Adicionar</button>
-            <button type="button" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded" onclick="document.getElementById('configModal').classList.add('hidden'); document.getElementById('teamForm').reset();">Cancelar</button>
+          <div>
+            <label class="block text-sm mb-1">Nome da Equipe</label>
+            <input id="teamName" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Ex.: Equipe Alfa">
+          </div>
+          <div>
+            <label class="block text-sm mb-1">Endereço da Operação</label>
+            <input id="teamLocation" type="text" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Ex.: Av. X, 123 — Bairro Y">
+          </div>
+          <div>
+            <label class="block text-sm mb-1">URL / ID do YouTube (playlist)</label>
+            <input id="youtubeUrl" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Cole a URL ou ID da playlist">
+          </div>
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <button type="button" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onclick="document.getElementById('configModal').classList.add('hidden')">Fechar</button>
+            <button id="btnAddTeam" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">Inserir</button>
           </div>
         </form>
       </div>
