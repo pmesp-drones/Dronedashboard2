@@ -41,10 +41,19 @@
     const qs=(s,e=document)=>e.querySelector(s);
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
-    /* ===== Params / Modo ===== */
-    const params = new URLSearchParams(location.search);
-    const MODE   = (params.get('mode') || 'edit').toLowerCase();
-    const isView = MODE === 'view';
+/* ===== Params / Modo / CPA ===== */
+const params = new URLSearchParams(location.search);
+const MODE   = (params.get('mode') || 'edit').toLowerCase();
+const isView = MODE === 'view';
+
+// Deriva o CPA do NOME DO ARQUIVO (index.html, op1.html, op2.html, …)
+const fileName = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+const m = fileName.match(/(?:cpa|op)(\d+)\.html$/i);
+// Se o arquivo for op3.html => OP3 | se for cpa7.html => CPA7 | se não casar => usa o próprio nome do arquivo (INDEX, OP1, OP2…)
+const CPA_FALLBACK = m ? `${fileName.startsWith('op') ? 'OP' : 'CPA'}${m[1]}` : null;
+const DEFAULT_CPA  = fileName.replace('.html','').toUpperCase(); // INDEX, OP1, OP2, OP3, OP4…
+const CPA_KEY      = String((params.get('cpa') || CPA_FALLBACK || DEFAULT_CPA)).toUpperCase();
+
 
     /* ===== CPA fixo deste arquivo ===== */
     const FORCE_CPA = 'OP1';
