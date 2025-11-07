@@ -36,21 +36,25 @@
 
   <script>
   (function(){
+    // Silencia warnings chatos do YouTube no console
+    const _warn = console.warn;
+    console.warn = function (...args) {
+      if (typeof args[0] === 'string' && args[0].includes('unreachable code after return statement')) return;
+      _warn.apply(console, args);
+    };
+
     const qs=(s,e=document)=>e.querySelector(s);
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-
-    /* ===== Params / Modo / CPA ===== */
     const params = new URLSearchParams(location.search);
     const MODE   = (params.get('mode') || 'edit').toLowerCase();
     const isView = MODE === 'view';
 
-    // Deriva CPA do nome do arquivo (op3.html => OP3). ?cpa= prevalece.
+    // CPA pela URL ou pelo nome do arquivo (op3.html => OP3)
     const fileName = (location.pathname.split('/').pop() || 'op3.html').toLowerCase();
-    const m = fileName.match(/(?:cpa|op)(\d+)\.html$/i);
-    const CPA_FALLBACK = m ? `${fileName.startsWith('op') ? 'OP' : 'CPA'}${m[1]}` : null;
+    const mm = fileName.match(/(?:cpa|op)(\d+)\.html$/i);
+    const CPA_FALLBACK = mm ? `${fileName.startsWith('op')?'OP':'CPA'}${mm[1]}` : 'OP3';
     const DEFAULT_CPA  = fileName.replace('.html','').toUpperCase();
     const CPA_KEY      = String((params.get('cpa') || CPA_FALLBACK || DEFAULT_CPA)).toUpperCase();
-    console.log("[DB] CPA_KEY:", CPA_KEY);
 
     /* ===== Login ===== */
     const AUTH_USER='OPERACAOCPM';
@@ -77,11 +81,8 @@
     };
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
-
-    // Caminho do painel
     const DB_PATH = `dashboards/${CPA_KEY}`;
     const dbRef = db.ref(DB_PATH);
-    console.log("[DB] usando", DB_PATH);
 
     /* ===== Estado ===== */
     let COLS=parseInt(params.get('cols')||'2',10);
@@ -198,17 +199,7 @@
 
       VIDEO_IDS.forEach((id,i)=>{
         const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
-        const card=document.createElement('div'); 
-        card.className='video-card'; 
-        card.dataset.idx=i; 
-        card.id=`card_${id}`;
-
-        // define link correto p/ "Tela cheia"
-        const isPlaylist = /^(PL|UU|LL|OL|RD)/i.test(id) || id.length > 16;
-        const fullLink = isPlaylist 
-          ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`
-          : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-
+        const card=document.createElement('div'); card.className='video-card'; card.dataset.idx=i; card.id=`card_${id}`;
         card.innerHTML=
           `<div class="video-box">
              <div id="yt_${i}" class="player-fill"></div>
@@ -218,7 +209,7 @@
              </div>
 
              <div class="absolute top-2 right-2 flex gap-2">
-               <button class="tile-btn" onclick="window.open('${fullLink}','_blank')">Tela cheia</button>
+               <button class="tile-btn" onclick="window.open('https://www.youtube.com/playlist?list=${encodeURIComponent(id)}','_blank')">Tela cheia</button>
                ${isView ? '' : `<button class="tile-btn" onclick="(function(){
                    if(!confirm('Remover esta equipe?')) return;
                    const idx=${i};
@@ -242,6 +233,7 @@
         attachDnD(card,i);
 
         if(YT_READY){
+          const isPlaylist = /^(PL|UU|LL|OL|RD)/i.test(id) || id.length > 16;
           const playerVars = isPlaylist
             ? { listType:'playlist', list:id, autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 }
             : { videoId:id,          autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 };
@@ -272,7 +264,6 @@
             }
           });
 
-          // UI de qualidade
           const qBtn = card.querySelector('[data-qbtn]');
           const qMenu= card.querySelector('[data-qmenu]');
           const qLabel=card.querySelector('[data-qlabel]');
@@ -298,14 +289,30 @@
       });
     }
 
-    /* ===== Realtime ===== */
+    /* ===== Persistência ===== */
+    const LS_KEY = `op_cache_${CPA_KEY}`;
+    function saveLocal(){
+      const payload = { ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() };
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(payload)); }catch(_){}
+    }
+    function tryLoadLocal(){
+      try{
+        const raw = localStorage.getItem(LS_KEY);
+        if(!raw) return false;
+        const j = JSON.parse(raw);
+        if(!j || !Array.isArray(j.ids)) return false;
+        VIDEO_IDS=j.ids||[]; LABELS=j.labels||[]; LOCS=j.locs||[]; COLS=j.cols||COLS;
+        renderGrid();
+        return true;
+      }catch(_){ return false; }
+    }
+
     function saveRealtime(){
       const payload = { ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() };
-      console.log("[SAVE] Gravando em", DB_PATH, payload);
+      saveLocal();
       dbRef.set(payload)
-        .then(()=>console.log("[SAVE] OK"))
         .catch(err=>{
-          console.error("[SAVE] Erro", err);
+          console.error("[SAVE] Firebase", err);
           if (String(err && err.code).includes('PERMISSION_DENIED')){
             alert(
 `Firebase PERMISSION_DENIED ao gravar em ${DB_PATH}.
@@ -332,51 +339,21 @@ Depois clique em "Publicar" e tente inserir novamente.`
     }
 
     function subscribeRealtime(){
+      let gotFirst=false;
       dbRef.on('value', snap=>{
-        console.log("[READ]", DB_PATH, snap.val());
+        gotFirst=true;
         const j=snap.val();
         if(!j){
+          // Se RT voltar vazio, tenta cache local (só no modo editor)
+          if(!isView && tryLoadLocal()) return;
           VIDEO_IDS=[]; LABELS=[]; LOCS=[];
-          renderGrid();
-          return;
+          renderGrid(); return;
         }
-
-        const newIds = j.ids || [];
-        const newLabels = j.labels || [];
-        const newLocs = j.locs || [];
-        COLS = parseInt(j.cols || COLS || 2, 10);
-
-        const sameSet = newIds.length===VIDEO_IDS.length &&
-                        [...newIds].sort().join(',') === [...VIDEO_IDS].sort().join(',');
-
-        if (sameSet && YT_READY){
-          const grid = document.querySelector('#gridContainer');
-          newIds.forEach(id=>{
-            const el = document.getElementById(`card_${id}`);
-            if(el) grid.appendChild(el);
-          });
-          VIDEO_IDS = newIds.slice();
-          LABELS    = newLabels.slice();
-          LOCS      = newLocs.slice();
-
-          newIds.forEach((id, idx)=>{
-            const card  = document.getElementById(`card_${id}`);
-            if(card){
-              const title = card.querySelector('h3');
-              const locEl = card.querySelector('p.text-gray-400');
-              if(title) title.textContent = newLabels[idx] || `Equipe ${idx+1}`;
-              if(locEl) locEl.textContent = newLocs[idx]   || '';
-            }
-          });
-          applyGridCols();
-        } else {
-          VIDEO_IDS = newIds.slice();
-          LABELS    = newLabels.slice();
-          LOCS      = newLocs.slice();
-          renderGrid();
-        }
+        VIDEO_IDS = j.ids||[]; LABELS = j.labels||[]; LOCS = j.locs||[]; COLS = parseInt(j.cols||COLS||2,10);
+        renderGrid();
       }, err=>{
-        console.error("[READ] erro:", err);
+        console.error("[READ] Firebase", err);
+        if(!gotFirst && !isView) tryLoadLocal();
       });
     }
 
@@ -384,7 +361,7 @@ Depois clique em "Publicar" e tente inserir novamente.`
     document.addEventListener('DOMContentLoaded', ()=>{
       qs('#btnShare')?.classList.toggle('hidden', isView);
       qs('#btnConfig')?.classList.toggle('hidden', isView);
-      qs('#btnClearAll')?.classList.toggle('hidden', isView);  <!-- FIX -->
+      qs('#btnClearAll')?.classList.toggle('hidden', isView);
 
       if(!isView){
         if(auth_ok_until()<=Date.now()){
