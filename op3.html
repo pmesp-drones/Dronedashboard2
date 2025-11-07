@@ -277,10 +277,14 @@
         }
       });
     }
+function saveRealtime(){
+  const payload = { ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() };
+  console.log("[SAVE] Gravando em", DB_PATH, payload);
+  dbRef.set(payload)
+    .then(()=>console.log("[SAVE] OK"))
+    .catch(err=>console.error("[SAVE] Erro", err));
+}
 
-    function saveRealtime(){
-      dbRef.set({ ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() });
-    }
     function subscribeRealtime(){
       dbRef.on('value', snap=>{
         const j=snap.val(); if(!j){ VIDEO_IDS=[]; LABELS=[]; LOCS=[]; renderGrid(); return; }
