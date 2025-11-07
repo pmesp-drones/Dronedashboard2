@@ -323,18 +323,29 @@ Cole estas REGRAS no Realtime Database e clique em "Publicar":
 
 {
   "rules": {
+    // Bloqueia leitura/escrita no resto do banco
     ".read": false,
     ".write": false,
 
+    // Versão que você está usando no código
     "dashboards_v2": {
-      "$any": {
+      "$op": {
         ".read": true,
-        ".write": true
+        ".write": true,
+        ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
       }
     }
+
+    // (opcional) se em algum momento usar a pasta antiga:
+    // "dashboards": {
+    //   "$op": {
+    //     ".read": true,
+    //     ".write": true,
+    //     ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
+    //   }
+    // }
   }
 }
-
 
 Depois tente inserir novamente.`
             );
