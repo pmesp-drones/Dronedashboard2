@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Programa de Policiamento com Drones — OPERÇÃO FÓRMULA 1 2025</title>
+  <title>Programa de Policiamento com Drones — OPERAÇÃO FÓRMULA 1 2025</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -341,13 +341,18 @@ Corrija as REGRAS do Realtime Database:
   }
 }
 
+Depois clique em "Publicar" e tente inserir novamente.`
+            );
+          }
+        });
+    } // <<---- FECHOU catch/if/alert certinho
+
     function subscribeRealtime(){
       let gotFirst=false;
       dbRef.on('value', snap=>{
         gotFirst=true;
         const j=snap.val();
         if(!j){
-          // Se RT voltar vazio, tenta cache local (só no modo editor)
           if(!isView && tryLoadLocal()) return;
           VIDEO_IDS=[]; LABELS=[]; LOCS=[];
           renderGrid(); return;
