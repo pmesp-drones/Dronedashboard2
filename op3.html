@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones — COMUNIDADE FERRAZÓPOLIS</title>
-  <!-- build: v9.1.2-op2 - CPA fixo (OP2) + root v2 + sem limite de lives + CAVPM logo -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -30,6 +29,7 @@
     .q-dot{ width:8px; height:8px; border-radius:999px; background:#60a5fa; opacity:.9; }
   </style>
 
+  <!-- APIs -->
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -39,19 +39,20 @@
     const qs=(s,e=document)=>e.querySelector(s);
     const esc=s=>String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 
+    /* ===== Params / Modo / CPA ===== */
     const params = new URLSearchParams(location.search);
     const MODE   = (params.get('mode') || 'edit').toLowerCase();
     const isView = MODE === 'view';
 
-    /* ===== Params / Modo / CPA (AJUSTADO) ===== */
-    // Deriva o CPA a partir do nome do arquivo (op3.html → OP3). Se vier ?cpa= na URL, ele prevalece.
+    // Deriva CPA do nome do arquivo (op3.html => OP3). ?cpa= prevalece.
     const fileName = (location.pathname.split('/').pop() || 'op3.html').toLowerCase();
     const m = fileName.match(/(?:cpa|op)(\d+)\.html$/i);
     const CPA_FALLBACK = m ? `${fileName.startsWith('op') ? 'OP' : 'CPA'}${m[1]}` : null;
-    const DEFAULT_CPA  = fileName.replace('.html','').toUpperCase(); // "OP3"
+    const DEFAULT_CPA  = fileName.replace('.html','').toUpperCase();
     const CPA_KEY      = String((params.get('cpa') || CPA_FALLBACK || DEFAULT_CPA)).toUpperCase();
     console.log("[DB] CPA_KEY:", CPA_KEY);
 
+    /* ===== Login ===== */
     const AUTH_USER='OPERACAOCPM';
     const AUTH_PASS='CAVPMDRONES';
     const REMEMBER_MIN=240;
@@ -63,6 +64,7 @@
       err?.classList.remove('hidden'); setTimeout(()=>err?.classList.add('hidden'),1500); return false;
     }
 
+    /* ===== Firebase ===== */
     const FIREBASE = {
       apiKey: "AIzaSyDadspZB30sQOgZr7PTcSbub1ZJB80Kui4",
       authDomain: "dashboarddronepmesp.firebaseapp.com",
@@ -76,16 +78,17 @@
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
 
-
     const DB_PATH = `dashboards/${CPA_KEY}`;
-const dbRef = db.ref(DB_PATH);
-console.log("[DB] usando", DB_PATH);
+    const dbRef = db.ref(DB_PATH);
+    console.log("[DB] usando", DB_PATH);
 
+    /* ===== Estado ===== */
     let COLS=parseInt(params.get('cols')||'2',10);
     let VIEW_COLS_OVERRIDE=null;
     let VIDEO_IDS=[], LABELS=[], LOCS=[];
     let YT_READY=false;
 
+    /* ===== Qualidade ===== */
     const DEFAULT_QUALITY='tiny';
     const Q_KEY_PREFIX='liveQ_';
     const Q_ORDER=['tiny','small','medium','large','hd720','hd1080','highres'];
@@ -109,6 +112,7 @@ console.log("[DB] usando", DB_PATH);
       }, interval);
     }
 
+    /* ===== Utils ===== */
     const YT_ID_RE=/^[a-zA-Z0-9_-]{10,}$/;
     function idFromUrl(input){
       if(!input) return '';
@@ -128,6 +132,7 @@ console.log("[DB] usando", DB_PATH);
       return '';
     }
 
+    /* ===== Drag & Drop ===== */
     let dragSrcIndex=null;
     function attachDnD(cardEl, index){
       if(isView) return;
@@ -150,6 +155,7 @@ console.log("[DB] usando", DB_PATH);
       });
     }
 
+    /* ===== YouTube Ready ===== */
     window.onYouTubeIframeAPIReady=function(){ YT_READY=true; renderGrid(); };
 
     function applyGridCols(){
@@ -225,9 +231,15 @@ console.log("[DB] usando", DB_PATH);
         attachDnD(card,i);
 
         if(YT_READY){
+          // Detecta playlist ou vídeo automaticamente
+          const isPlaylist = /^(PL|UU|LL|OL|RD)/i.test(id) || id.length > 16;
+          const playerVars = isPlaylist
+            ? { listType:'playlist', list:id, autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 }
+            : { videoId:id,          autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 };
+
           const player = new YT.Player(`yt_${i}`,{
             width:'100%', height:'100%',
-            playerVars:{ listType:'playlist', list:id, autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
+            playerVars,
             events:{
               onReady:e=>{
                 try{ e.target.mute(); e.target.playVideo(); }catch(_){}
@@ -251,15 +263,14 @@ console.log("[DB] usando", DB_PATH);
             }
           });
 
+          // UI de qualidade
           const qBtn = card.querySelector('[data-qbtn]');
           const qMenu= card.querySelector('[data-qmenu]');
           const qLabel=card.querySelector('[data-qlabel]');
-
           qBtn?.addEventListener('click', (ev)=>{
             ev.stopPropagation();
             qMenu.style.display = (qMenu.style.display==='block' ? 'none' : 'block');
           });
-
           qMenu?.querySelectorAll('.q-item').forEach(item=>{
             item.addEventListener('click', ()=>{
               const q=item.getAttribute('data-q');
@@ -269,7 +280,6 @@ console.log("[DB] usando", DB_PATH);
               qMenu.style.display='none';
             });
           });
-
           document.addEventListener('click', (ev)=>{
             if (!qMenu.contains(ev.target) && !qBtn.contains(ev.target)){
               qMenu.style.display='none';
@@ -278,20 +288,21 @@ console.log("[DB] usando", DB_PATH);
         }
       });
     }
-function saveRealtime(){
-  const payload = { ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() };
-  console.log("[SAVE] Gravando em", DB_PATH, payload);
-  dbRef.set(payload)
-    .then(()=>console.log("[SAVE] OK"))
-    .catch(err=>console.error("[SAVE] Erro", err));
-}
+
+    /* ===== Realtime ===== */
+    function saveRealtime(){
+      const payload = { ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() };
+      console.log("[SAVE] Gravando em", DB_PATH, payload);
+      dbRef.set(payload)
+        .then(()=>console.log("[SAVE] OK"))
+        .catch(err=>console.error("[SAVE] Erro", err));
+    }
 
     function subscribeRealtime(){
       dbRef.on('value', snap=>{
-  console.log("[READ]", DB_PATH, snap.val());
-
-      dbRef.on('value', snap=>{
-        const j=snap.val(); if(!j){ VIDEO_IDS=[]; LABELS=[]; LOCS=[]; renderGrid(); return; }
+        console.log("[READ]", DB_PATH, snap.val());
+        const j=snap.val();
+        if(!j){ VIDEO_IDS=[]; LABELS=[]; LOCS=[]; renderGrid(); return; }
         const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
         COLS = parseInt(j.cols||COLS||2,10);
 
@@ -321,6 +332,7 @@ function saveRealtime(){
       });
     }
 
+    /* ===== Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
       qs('#btnShare')?.classList.toggle('hidden', isView);
       qs('#btnConfig')?.classList.toggle('hidden', isView);
@@ -403,10 +415,8 @@ function saveRealtime(){
       <div class="flex items-center gap-3">
         <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/Logo_PMESP.png" alt="PMESP" class="w-10 h-10 object-contain rounded bg-white/5 p-1">
         <div>
-          <!-- Título + LOGO CAVPM lado a lado -->
           <div class="flex items-center gap-2">
             <h1 class="text-lg font-bold">Dashboard Programa de Policiamento com Drones — COMUNIDADE FERRAZÓPOLIS</h1>
-            <!-- Coloque seu arquivo logo-cavpm.png na mesma pasta do index ou ajuste o src -->
             <img src="cavpm.png" alt="CAVPM" class="w-10 h-10 object-contain rounded bg-white/5 p-1" title="Comando de Aviação da Polícia Militar (CAVPM)">
           </div>
           <p class="text-gray-400 text-xs">Monitoramento em Tempo Real • Firebase RT • COMUNIDADE FERRAZÓPOLIS</p>
@@ -449,8 +459,8 @@ function saveRealtime(){
             <input id="teamLocation" type="text" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Ex.: Av. X, 123 — Bairro Y">
           </div>
           <div>
-            <label class="block text-sm mb-1">URL / ID do YouTube (playlist)</label>
-            <input id="youtubeUrl" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Cole a URL ou ID da playlist">
+            <label class="block text-sm mb-1">URL / ID do YouTube</label>
+            <input id="youtubeUrl" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Vídeo (https://youtu.be/ID) ou Playlist (?list=...)">
           </div>
           <div class="flex items-center justify-end gap-2 pt-2">
             <button type="button" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onclick="document.getElementById('configModal').classList.add('hidden')">Fechar</button>
