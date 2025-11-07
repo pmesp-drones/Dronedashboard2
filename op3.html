@@ -323,16 +323,8 @@ Corrija as REGRAS do Realtime Database:
     ".read": false,
     ".write": false,
 
-    "dashboards": {
-      "$cpa": {
-        ".read": true,
-        ".write": true,
-        ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
-      }
-    },
-
     "dashboards_v2": {
-      "$cpa": {
+      "$op": {
         ".read": true,
         ".write": true,
         ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
@@ -340,6 +332,7 @@ Corrija as REGRAS do Realtime Database:
     }
   }
 }
+
 
 Depois clique em "Publicar" e tente inserir novamente.`
             );
