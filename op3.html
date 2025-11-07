@@ -76,9 +76,10 @@
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
 
-    const DB_ROOT='dashboards_v2';
-    const DB_PATH=`${DB_ROOT}/${CPA_KEY}`;
-    const dbRef=db.ref(DB_PATH);
+
+    const DB_PATH = `dashboards/${CPA_KEY}`;
+const dbRef = db.ref(DB_PATH);
+console.log("[DB] usando", DB_PATH);
 
     let COLS=parseInt(params.get('cols')||'2',10);
     let VIEW_COLS_OVERRIDE=null;
