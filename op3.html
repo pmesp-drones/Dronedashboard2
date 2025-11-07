@@ -327,14 +327,14 @@ Cole estas REGRAS no Realtime Database e clique em "Publicar":
     ".write": false,
 
     "dashboards_v2": {
-      "$cpa": {
+      "$any": {
         ".read": true,
-        ".write": true,
-        ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
+        ".write": true
       }
     }
   }
 }
+
 
 Depois tente inserir novamente.`
             );
