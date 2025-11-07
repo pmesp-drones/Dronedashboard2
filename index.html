@@ -199,95 +199,104 @@ const CPA_KEY      = String((params.get('cpa') || CPA_FALLBACK || DEFAULT_CPA)).
         return;
       }
 
-      VIDEO_IDS.forEach((id,i)=>{
-        const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
-        const card=document.createElement('div'); card.className='video-card'; card.dataset.idx=i; card.id=`card_${id}`;
-        card.innerHTML=
-          `<div class="video-box">
-             <div id="yt_${i}" class="player-fill"></div>
+VIDEO_IDS.forEach((id,i)=>{
+  const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
+  const card=document.createElement('div'); 
+  card.className='video-card'; 
+  card.dataset.idx=i; 
+  card.id=`card_${id}`;
+  
+  card.innerHTML=
+    `<div class="video-box">
+       <div id="yt_${i}" class="player-fill"></div>
 
-             <div class="absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
-               <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO
-             </div>
+       <div class="absolute top-2 left-2 px-2 py-1 rounded text-[10px] badge-live flex items-center gap-1">
+         <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> AO VIVO
+       </div>
 
-             <div class="absolute top-2 right-2 flex gap-2">
-               <button class="tile-btn" onclick="window.open('https://www.youtube.com/playlist?list=${encodeURIComponent(id)}','_blank')">Tela cheia</button>
-               ${isView ? '' : `<button class="tile-btn" onclick="(function(){
-                   if(!confirm('Remover esta equipe?')) return;
-                   const idx=${i};
-                   VIDEO_IDS.splice(idx,1);
-                   LABELS.splice(idx,1);
-                   LOCS.splice(idx,1);
-                   saveRealtime();
-                   renderGrid();
-                 })()">Remover</button>`}
-             </div>
+       <div class="absolute top-2 right-2 flex gap-2">
+         <button class="tile-btn" onclick="window.open('https://www.youtube.com/playlist?list=${encodeURIComponent(id)}','_blank')">Tela cheia</button>
+         ${isView ? '' : `<button class="tile-btn" onclick="(function(){
+             if(!confirm('Remover esta equipe?')) return;
+             const idx=${i};
+             VIDEO_IDS.splice(idx,1);
+             LABELS.splice(idx,1);
+             LOCS.splice(idx,1);
+             saveRealtime();
+             renderGrid();
+           })()">Remover</button>`}
+       </div>
 
-             ${qualityControlTemplate(Q_LABEL[savedQ])}
-           </div>
+       ${qualityControlTemplate(Q_LABEL[savedQ])}
+     </div>
 
-           <div class="px-2 pt-1 pb-0 bg-gray-800/70">
-             <h3 class="font-medium text-sm">${esc(LABELS[i]||'Equipe '+(i+1))}</h3>
-             <p class="text-gray-400 text-[11px]">${esc(LOCS[i]||'')}</p>
-           </div>`;
+     <div class="px-2 pt-1 pb-0 bg-gray-800/70">
+       <h3 class="font-medium text-sm">${esc(LABELS[i]||'Equipe '+(i+1))}</h3>
+       <p class="text-gray-400 text-[11px]">${esc(LOCS[i]||'')}</p>
+     </div>`;
 
-        grid.appendChild(card);
-        attachDnD(card,i);
+  grid.appendChild(card);
+  attachDnD(card,i);
 
-        if(YT_READY){
-          const player = new YT.Player(`yt_${i}`,{
-            width:'100%', height:'100%',
-            playerVars:{ listType:'playlist', list:id, autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 },
-            events:{
-              onReady:e=>{
-                try{ e.target.mute(); e.target.playVideo(); }catch(_){}
-                const desired=getSavedQ(id) || DEFAULT_QUALITY;
-                const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-                const best=pickAvailableQuality(desired, avail);
-                e.target.setPlaybackQuality && e.target.setPlaybackQuality(best);
-                enforceQuality(e.target, best);
-                const qLabel=card.querySelector('[data-qlabel]');
-                if(qLabel) qLabel.textContent=Q_LABEL[best]||best;
-                if(!getSavedQ(id)) saveQ(id, best);
-              },
-              onStateChange:e=>{
-                if (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING){
-                  const desired=getSavedQ(id) || DEFAULT_QUALITY;
-                  const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
-                  const best=pickAvailableQuality(desired, avail);
-                  try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
-                }
-              }
-            }
-          });
+  // ✅ Aqui está a correção: detecta playlist ou vídeo automaticamente
+  if(YT_READY){
+    const isPlaylist = /^(PL|UU|LL|OL|RD)/i.test(id) || id.length > 16;
+    const playerVars = isPlaylist
+      ? { listType:'playlist', list:id, autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 }
+      : { videoId:id,          autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 };
 
-          const qBtn = card.querySelector('[data-qbtn]');
-          const qMenu= card.querySelector('[data-qmenu]');
+    const player = new YT.Player(`yt_${i}`,{
+      width:'100%', height:'100%',
+      playerVars,
+      events:{
+        onReady:e=>{
+          try{ e.target.mute(); e.target.playVideo(); }catch(_){}
+          const desired=getSavedQ(id) || DEFAULT_QUALITY;
+          const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
+          const best=pickAvailableQuality(desired, avail);
+          e.target.setPlaybackQuality && e.target.setPlaybackQuality(best);
+          enforceQuality(e.target, best);
           const qLabel=card.querySelector('[data-qlabel]');
-
-          qBtn?.addEventListener('click', (ev)=>{
-            ev.stopPropagation();
-            qMenu.style.display = (qMenu.style.display==='block' ? 'none' : 'block');
-          });
-
-          qMenu?.querySelectorAll('.q-item').forEach(item=>{
-            item.addEventListener('click', ()=>{
-              const q=item.getAttribute('data-q');
-              saveQ(id,q);
-              qLabel.textContent=Q_LABEL[q]||q;
-              try{ player.setPlaybackQuality && player.setPlaybackQuality(q); enforceQuality(player, q); }catch(_){}
-              qMenu.style.display='none';
-            });
-          });
-
-          document.addEventListener('click', (ev)=>{
-            if (!qMenu.contains(ev.target) && !qBtn.contains(ev.target)){
-              qMenu.style.display='none';
-            }
-          });
+          if(qLabel) qLabel.textContent=Q_LABEL[best]||best;
+          if(!getSavedQ(id)) saveQ(id, best);
+        },
+        onStateChange:e=>{
+          if (e.data===YT.PlayerState.PLAYING || e.data===YT.PlayerState.BUFFERING){
+            const desired=getSavedQ(id) || DEFAULT_QUALITY;
+            const avail=e.target.getAvailableQualityLevels?e.target.getAvailableQualityLevels():[];
+            const best=pickAvailableQuality(desired, avail);
+            try{ e.target.setPlaybackQuality && e.target.setPlaybackQuality(best); }catch(_){}
+          }
         }
+      }
+    });
+
+    const qBtn = card.querySelector('[data-qbtn]');
+    const qMenu= card.querySelector('[data-qmenu]');
+    const qLabel=card.querySelector('[data-qlabel]');
+
+    qBtn?.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      qMenu.style.display = (qMenu.style.display==='block' ? 'none' : 'block');
+    });
+
+    qMenu?.querySelectorAll('.q-item').forEach(item=>{
+      item.addEventListener('click', ()=>{
+        const q=item.getAttribute('data-q');
+        saveQ(id,q);
+        qLabel.textContent=Q_LABEL[q]||q;
+        try{ player.setPlaybackQuality && player.setPlaybackQuality(q); enforceQuality(player, q); }catch(_){}
+        qMenu.style.display='none';
       });
-    }
+    });
+
+    document.addEventListener('click', (ev)=>{
+      if (!qMenu.contains(ev.target) && !qBtn.contains(ev.target)){
+        qMenu.style.display='none';
+      }
+    });
+  }
+});
 
     /* ===== Realtime ===== */
     function saveRealtime(){
