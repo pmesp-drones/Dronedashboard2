@@ -81,6 +81,8 @@
     };
     firebase.initializeApp(FIREBASE);
     const db=firebase.database();
+
+    // >>> usa dashboards_v2/<CPA|OP>
     const DB_PATH = `dashboards_v2/${CPA_KEY}`;
     const dbRef = db.ref(DB_PATH);
 
@@ -317,14 +319,15 @@
             alert(
 `Firebase PERMISSION_DENIED ao gravar em ${DB_PATH}.
 
-Corrija as REGRAS do Realtime Database:
+Cole estas REGRAS no Realtime Database e clique em "Publicar":
+
 {
   "rules": {
     ".read": false,
     ".write": false,
 
     "dashboards_v2": {
-      "$op": {
+      "$cpa": {
         ".read": true,
         ".write": true,
         ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
@@ -333,12 +336,11 @@ Corrija as REGRAS do Realtime Database:
   }
 }
 
-
-Depois clique em "Publicar" e tente inserir novamente.`
+Depois tente inserir novamente.`
             );
           }
         });
-    } // <<---- FECHOU catch/if/alert certinho
+    }
 
     function subscribeRealtime(){
       let gotFirst=false;
@@ -499,3 +501,4 @@ Depois clique em "Publicar" e tente inserir novamente.`
 
 </body>
 </html>
+
