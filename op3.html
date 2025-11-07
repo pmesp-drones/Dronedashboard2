@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dashboard Programa de Policiamento com Drones — COMUNIDADE FERRAZÓPOLIS</title>
+
+  <!-- Tailwind (ok para testes; em produção prefira build local) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --card:#111827; }
@@ -122,7 +124,7 @@
         url.hostname=url.hostname.replace(/^m\./,'').replace(/^music\./,'');
         const list=url.searchParams.get('list'); if(list) return list;
         const v=url.searchParams.get('v'); if(v) return v;
-        const m=url.pathname.match(/\/(shorts|live)\/([a-zA-Z0-9_-]{10,})/); if(m) return m[2];
+        const mm=url.pathname.match(/\/(shorts|live)\/([a-zA-Z0-9_-]{10,})/); if(mm) return mm[2];
         if(url.hostname.includes('youtu.be')){ const p=url.pathname.replace(/^\/+/,'').split('/')[0]; if(p) return p; }
       }catch(_){
         if(u.includes('list=')) return u.split('list=')[1].split('&')[0];
@@ -197,7 +199,11 @@
 
       VIDEO_IDS.forEach((id,i)=>{
         const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
-        const card=document.createElement('div'); card.className='video-card'; card.dataset.idx=i; card.id=`card_${id}`;
+        const card=document.createElement('div'); 
+        card.className='video-card'; 
+        card.dataset.idx=i; 
+        card.id=`card_${id}`;
+
         card.innerHTML=
           `<div class="video-box">
              <div id="yt_${i}" class="player-fill"></div>
@@ -231,7 +237,7 @@
         attachDnD(card,i);
 
         if(YT_READY){
-          // Detecta playlist ou vídeo automaticamente
+          // Detecta playlist OU vídeo
           const isPlaylist = /^(PL|UU|LL|OL|RD)/i.test(id) || id.length > 16;
           const playerVars = isPlaylist
             ? { listType:'playlist', list:id, autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 }
@@ -302,38 +308,54 @@
       dbRef.on('value', snap=>{
         console.log("[READ]", DB_PATH, snap.val());
         const j=snap.val();
-        if(!j){ VIDEO_IDS=[]; LABELS=[]; LOCS=[]; renderGrid(); return; }
-        const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
-        COLS = parseInt(j.cols||COLS||2,10);
+        if(!j){
+          VIDEO_IDS=[]; LABELS=[]; LOCS=[];
+          renderGrid();
+          return;
+        }
+
+        const newIds = j.ids || [];
+        const newLabels = j.labels || [];
+        const newLocs = j.locs || [];
+        COLS = parseInt(j.cols || COLS || 2, 10);
 
         const sameSet = newIds.length===VIDEO_IDS.length &&
                         [...newIds].sort().join(',') === [...VIDEO_IDS].sort().join(',');
 
-        if(sameSet && YT_READY){
-          const grid=qs('#gridContainer');
+        if (sameSet && YT_READY){
+          const grid = document.querySelector('#gridContainer');
           newIds.forEach(id=>{
-            const el=document.getElementById(`card_${id}`);
+            const el = document.getElementById(`card_${id}`);
             if(el) grid.appendChild(el);
           });
-          VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
-          newIds.forEach((id,idx)=>{
-            const card=document.getElementById(`card_${id}`);
+          VIDEO_IDS = newIds.slice();
+          LABELS    = newLabels.slice();
+          LOCS      = newLocs.slice();
+
+          newIds.forEach((id, idx)=>{
+            const card  = document.getElementById(`card_${id}`);
             if(card){
-              const title=card.querySelector('h3'); const loc=card.querySelector('p.text-gray-400');
-              if(title) title.textContent=newLabels[idx]||`Equipe ${idx+1}`;
-              if(loc)   loc.textContent=newLocs[idx]||'';
+              const title = card.querySelector('h3');
+              const locEl = card.querySelector('p.text-gray-400');
+              if(title) title.textContent = newLabels[idx] || `Equipe ${idx+1}`;
+              if(locEl) locEl.textContent = newLocs[idx]   || '';
             }
           });
           applyGridCols();
         } else {
-          VIDEO_IDS=newIds.slice(); LABELS=newLabels.slice(); LOCS=newLocs.slice();
+          VIDEO_IDS = newIds.slice();
+          LABELS    = newLabels.slice();
+          LOCS      = newLocs.slice();
           renderGrid();
         }
+      }, err=>{
+        console.error("[READ] erro: ", err);
       });
     }
 
     /* ===== Init ===== */
     document.addEventListener('DOMContentLoaded', ()=>{
+      // Mostrar/ocultar botões conforme modo
       qs('#btnShare')?.classList.toggle('hidden', isView);
       qs('#btnConfig')?.classList.toggle('hidden', isView);
       qs('#btnClearAll')?.classList.toggle('hidden', isView);
@@ -347,7 +369,10 @@
         qs('#authOverlay').style.display='none';
       }
 
-      qs('#btnFullscreen')?.addEventListener('click',()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
+      qs('#btnFullscreen')?.addEventListener('click',()=>{ 
+        if(!document.fullscreenElement) document.documentElement.requestFullscreen(); 
+        else document.exitFullscreen(); 
+      });
 
       qs('#layout')?.addEventListener('change', ()=>{
         const val = parseInt(qs('#layout').value,10)||2;
@@ -355,6 +380,7 @@
         else { COLS = val; saveRealtime(); applyGridCols(); }
       });
 
+      // Inserir equipe
       qs('#btnAddTeam')?.addEventListener('click', e=>{
         e.preventDefault();
         const name=qs('#teamName').value.trim();
@@ -363,14 +389,15 @@
         if(!name||!url){ alert('Preencha Nome e URL'); return; }
 
         const id=idFromUrl(url);
-        if(!id){ alert('URL/ID inválido do YouTube/Playlist.'); return; }
+        if(!id){ alert('URL/ID inválido do YouTube.'); return; }
         if(VIDEO_IDS.includes(id)){ alert('Esta equipe (ID) já está no painel.'); return; }
 
         VIDEO_IDS.push(id); LABELS.push(name); LOCS.push(loc);
         if(!getSavedQ(id)) saveQ(id, DEFAULT_QUALITY);
         saveRealtime();
         renderGrid();
-        qs('#configModal').classList.add('hidden'); qs('#teamForm').reset();
+        qs('#configModal').classList.add('hidden'); 
+        qs('#teamForm').reset();
       });
 
       qs('#btnShare')?.addEventListener('click', ()=>{
