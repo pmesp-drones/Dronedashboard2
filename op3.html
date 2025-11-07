@@ -287,6 +287,9 @@ function saveRealtime(){
 
     function subscribeRealtime(){
       dbRef.on('value', snap=>{
+  console.log("[READ]", DB_PATH, snap.val());
+
+      dbRef.on('value', snap=>{
         const j=snap.val(); if(!j){ VIDEO_IDS=[]; LABELS=[]; LOCS=[]; renderGrid(); return; }
         const newIds=j.ids||[], newLabels=j.labels||[], newLocs=j.locs||[];
         COLS = parseInt(j.cols||COLS||2,10);
