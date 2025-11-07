@@ -198,7 +198,17 @@
 
       VIDEO_IDS.forEach((id,i)=>{
         const savedQ = getSavedQ(id) || DEFAULT_QUALITY;
-        const card=document.createElement('div'); card.className='video-card'; card.dataset.idx=i; card.id=`card_${id}`;
+        const card=document.createElement('div'); 
+        card.className='video-card'; 
+        card.dataset.idx=i; 
+        card.id=`card_${id}`;
+
+        // define link correto p/ "Tela cheia"
+        const isPlaylist = /^(PL|UU|LL|OL|RD)/i.test(id) || id.length > 16;
+        const fullLink = isPlaylist 
+          ? `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`
+          : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+
         card.innerHTML=
           `<div class="video-box">
              <div id="yt_${i}" class="player-fill"></div>
@@ -208,7 +218,7 @@
              </div>
 
              <div class="absolute top-2 right-2 flex gap-2">
-               <button class="tile-btn" onclick="window.open('https://www.youtube.com/playlist?list=${encodeURIComponent(id)}','_blank')">Tela cheia</button>
+               <button class="tile-btn" onclick="window.open('${fullLink}','_blank')">Tela cheia</button>
                ${isView ? '' : `<button class="tile-btn" onclick="(function(){
                    if(!confirm('Remover esta equipe?')) return;
                    const idx=${i};
@@ -232,8 +242,6 @@
         attachDnD(card,i);
 
         if(YT_READY){
-          // Detecta playlist x vídeo
-          const isPlaylist = /^(PL|UU|LL|OL|RD)/i.test(id) || id.length > 16;
           const playerVars = isPlaylist
             ? { listType:'playlist', list:id, autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 }
             : { videoId:id,          autoplay:1, mute:1, playsinline:1, controls:0, rel:0, modestbranding:1 };
@@ -298,7 +306,6 @@
         .then(()=>console.log("[SAVE] OK"))
         .catch(err=>{
           console.error("[SAVE] Erro", err);
-          // Alerta amigável quando as regras do DB bloqueiam
           if (String(err && err.code).includes('PERMISSION_DENIED')){
             alert(
 `Firebase PERMISSION_DENIED ao gravar em ${DB_PATH}.
@@ -377,7 +384,7 @@ Depois clique em "Publicar" e tente inserir novamente.`
     document.addEventListener('DOMContentLoaded', ()=>{
       qs('#btnShare')?.classList.toggle('hidden', isView);
       qs('#btnConfig')?.classList.toggle('hidden', isView);
-      qs('#btnClearAll')?.classList.toggle('hidden', isView);
+      qs'#btnClearAll'?.classList.toggle('hidden', isView);
 
       if(!isView){
         if(auth_ok_until()<=Date.now()){
