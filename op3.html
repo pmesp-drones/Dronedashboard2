@@ -384,7 +384,7 @@ Depois clique em "Publicar" e tente inserir novamente.`
     document.addEventListener('DOMContentLoaded', ()=>{
       qs('#btnShare')?.classList.toggle('hidden', isView);
       qs('#btnConfig')?.classList.toggle('hidden', isView);
-      qs'#btnClearAll'?.classList.toggle('hidden', isView);
+      qs('#btnClearAll')?.classList.toggle('hidden', isView);  <!-- FIX -->
 
       if(!isView){
         if(auth_ok_until()<=Date.now()){
