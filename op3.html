@@ -329,15 +329,17 @@ Corrija as REGRAS do Realtime Database:
         ".write": true,
         ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
       }
+    },
+
+    "dashboards_v2": {
+      "$cpa": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
+      }
     }
   }
 }
-
-Depois clique em "Publicar" e tente inserir novamente.`
-            );
-          }
-        });
-    }
 
     function subscribeRealtime(){
       let gotFirst=false;
