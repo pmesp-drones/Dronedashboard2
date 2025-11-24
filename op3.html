@@ -215,9 +215,11 @@
                ${isView ? '' : `<button class="tile-btn" onclick="(function(){
                    if(!confirm('Remover esta equipe?')) return;
                    const idx=${i};
+                   const removedId = VIDEO_IDS[idx];
                    VIDEO_IDS.splice(idx,1);
                    LABELS.splice(idx,1);
                    LOCS.splice(idx,1);
+                   if (removedId) localStorage.removeItem('${Q_KEY_PREFIX}'+removedId);
                    saveRealtime();
                    renderGrid();
                  })()">Remover</button>`}
@@ -297,6 +299,9 @@
       const payload = { ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() };
       try{ localStorage.setItem(LS_KEY, JSON.stringify(payload)); }catch(_){}
     }
+    function clearLocal(){
+      try{ localStorage.removeItem(LS_KEY); }catch(_){}
+    }
     function tryLoadLocal(){
       try{
         const raw = localStorage.getItem(LS_KEY);
@@ -310,13 +315,17 @@
     }
 
     function saveRealtime(){
-      const payload = { ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() };
-      saveLocal();
-      dbRef.set(payload)
-        .catch(err=>{
-          console.error("[SAVE] Firebase", err);
-          if (String(err && err.code).includes('PERMISSION_DENIED')){
-            alert(
+      const hasData = VIDEO_IDS.length || LABELS.length || LOCS.length;
+
+      if (!hasData) {
+        // Zera tudo de verdade
+        clearLocal();
+        dbRef.remove()
+          .then(()=>{ renderGrid(); })
+          .catch(err=>{
+            console.error("[SAVE] Firebase (remove)", err);
+            if (String(err && err.code).includes('PERMISSION_DENIED')){
+              alert(
 `Firebase PERMISSION_DENIED ao gravar em ${DB_PATH}.
 
 Cole estas REGRAS no Realtime Database e clique em "Publicar":
@@ -335,15 +344,38 @@ Cole estas REGRAS no Realtime Database e clique em "Publicar":
         ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
       }
     }
+  }
+}
 
-    // (opcional) se em algum momento usar a pasta antiga:
-    // "dashboards": {
-    //   "$op": {
-    //     ".read": true,
-    //     ".write": true,
-    //     ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
-    //   }
-    // }
+Depois tente inserir novamente.`
+              );
+            }
+          });
+        return;
+      }
+
+      const payload = { ids:VIDEO_IDS, labels:LABELS, locs:LOCS, cols:COLS, ts:Date.now() };
+      saveLocal();
+      dbRef.set(payload)
+        .catch(err=>{
+          console.error("[SAVE] Firebase", err);
+          if (String(err && err.code).includes('PERMISSION_DENIED')){
+            alert(
+`Firebase PERMISSION_DENIED ao gravar em ${DB_PATH}.
+
+Cole estas REGRAS no Realtime Database e clique em "Publicar":
+
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "dashboards_v2": {
+      "$op": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['ids','labels','locs','cols','ts'])"
+      }
+    }
   }
 }
 
@@ -422,10 +454,23 @@ Depois tente inserir novamente.`
           .then(()=>alert('Link do VISUALIZADOR copiado:\n\n'+url.toString()));
       });
 
+      // >>> CORRIGIDO: limpeza total (Firebase + localStorage + qualidades)
       qs('#btnClearAll')?.addEventListener('click', ()=>{
         if(!confirm('Apagar TODAS as equipes do painel?')) return;
+
+        // IDs atuais para limpar qualidades salvas
+        const idsToClear = [...VIDEO_IDS];
+
+        // Zera arrays em memória
         VIDEO_IDS=[]; LABELS=[]; LOCS=[];
-        saveRealtime(); renderGrid();
+
+        // Limpa qualidades salvas por equipe
+        idsToClear.forEach(id=>{
+          if (id) localStorage.removeItem(Q_KEY_PREFIX+id);
+        });
+
+        // Salva / remove no Firebase + local
+        saveRealtime();
       });
 
       subscribeRealtime();
@@ -491,7 +536,7 @@ Depois tente inserir novamente.`
         <form id="teamForm" class="space-y-4">
           <div>
             <label class="block text-sm mb-1">Nome da Equipe</label>
-            <input id="teamName" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Ex.: Equipe Alfa">
+            <input id="teamName" type="text" required class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text:white" placeholder="Ex.: Equipe Alfa">
           </div>
           <div>
             <label class="block text-sm mb-1">Endereço da Operação</label>
@@ -512,4 +557,3 @@ Depois tente inserir novamente.`
 
 </body>
 </html>
-
